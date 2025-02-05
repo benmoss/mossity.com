@@ -16,6 +16,7 @@ frontend:
       commands:
         # Install pixi
         - curl -fsSL https://pixi.sh/install.sh | bash
+        - export PATH=/root/.pixi/bin:$PATH
     build:
       commands:
         - pixi run hugo --gc --minify

@@ -6,7 +6,7 @@ env:
     GO_VERSION: 1.23.3
     HUGO_VERSION: 0.139.3
     # Time zone
-    TZ: America/Los_Angeles
+    TZ: America/New_York
     # Cache
     HUGO_CACHEDIR: ${PWD}/.hugo
     NPM_CONFIG_CACHE: ${PWD}/.npm

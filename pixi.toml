@@ -10,3 +10,6 @@ version = "0.1.0"
 
 [dependencies]
 hugo = ">=0.143.1,<0.144"
+
+[system-requirements]
+linux="4.14"

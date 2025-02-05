@@ -1,0 +1,15 @@
+{{ define "main" }}
+{{ .Content }}
+
+{{ $recentPosts := first 10 (where .Site.RegularPages "Type" "in" .Site.Params.mainSections) }}
+
+<h2>Recent posts</h2>
+<ul>
+    {{ range $recentPosts }}
+    <li>
+        <a href={{.Permalink}}>{{.Title}}</a> - Published on {{ .Date.Format "January 2, 2006" }}
+    </li>
+    {{ end }}
+</ul>
+
+{{ end }}

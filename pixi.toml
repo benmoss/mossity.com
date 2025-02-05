@@ -1,0 +1,12 @@
+[project]
+authors = ["Ben Moss <ben@mossity.com>"]
+channels = ["conda-forge"]
+description = "Add a short description here"
+name = "mossity.com"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+hugo = ">=0.143.1,<0.144"

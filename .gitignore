@@ -4,3 +4,4 @@
 *.egg-info
 /public
 /resources/_gen
+.hugo_build.lock

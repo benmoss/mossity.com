@@ -1,8 +1,5 @@
 +++
-# This title is used as the og:title on Hugo's internal
-# opengraph structured data template on the home page.
-# See https://ogp.me/ and https://gohugo.io/templates/internal#open-graph.
-title = "Ben Moss' weblog"
+title = "Ben Moss's weblog"
 +++
 
-Hi! I'm Ben, aka @mossity aka @benmoss on various parts of the web.
+Hi! I'm Ben, aka [@mossity](https://bsky.app/profile/bmossity.bsky.social) aka [@benmoss](https://github.com/benmoss) on various parts of the web.

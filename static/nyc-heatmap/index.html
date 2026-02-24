@@ -528,7 +528,8 @@ function updateStats(blockCount, total, median) {
 // ============================================================
 // Static block data
 // ============================================================
-let allBlocks = null;
+let allBlocks    = null;
+let clusterIndex = null;
 
 async function loadStaticBlocks() {
   document.getElementById('loading').style.display = 'flex';
@@ -538,6 +539,7 @@ async function loadStaticBlocks() {
     const data = await resp.json();
     if (!Array.isArray(data.blocks)) throw new Error('Unexpected data format');
     allBlocks = data.blocks;
+    buildClusterIndex(allBlocks);
   } catch (err) {
     console.error('Could not load static block data:', err);
     const banner = document.getElementById('error-banner');
@@ -547,6 +549,29 @@ async function loadStaticBlocks() {
   } finally {
     document.getElementById('loading').style.display = 'none';
   }
+}
+
+function buildClusterIndex(blocks) {
+  const features = blocks.map(b => ({
+    type:     'Feature',
+    geometry: { type: 'Point', coordinates: [b.lng, b.lat] },
+    properties: {
+      total_assessed: b.total_assessed,
+      lot_count:      b.lot_count,
+      borocode:       b.borocode,
+      sample_address: b.sample_address,
+    },
+  }));
+  clusterIndex = new Supercluster({
+    radius:  60,
+    maxZoom: 14,
+    map:    p => ({ total_assessed: p.total_assessed, lot_count: p.lot_count }),
+    reduce: (acc, p) => {
+      acc.total_assessed += p.total_assessed;
+      acc.lot_count      += p.lot_count;
+    },
+  });
+  clusterIndex.load(features);
 }
 
 // ============================================================
@@ -590,13 +615,23 @@ async function doFetch() {
       document.getElementById('loading').style.display = 'none';
     }
   } else {
-    if (!allBlocks) return;
-    const sw   = bounds.getSouthWest();
-    const ne   = bounds.getNorthEast();
-    const rows = allBlocks.filter(b =>
-      b.lat >= sw.lat && b.lat <= ne.lat &&
-      b.lng >= sw.lng && b.lng <= ne.lng
+    if (!clusterIndex) return;
+    const sw       = bounds.getSouthWest();
+    const ne       = bounds.getNorthEast();
+    const features = clusterIndex.getClusters(
+      [sw.lng, sw.lat, ne.lng, ne.lat],
+      Math.round(zoom)
     );
+    const rows = features.map(f => ({
+      lat:            f.geometry.coordinates[1],
+      lng:            f.geometry.coordinates[0],
+      total_assessed: f.properties.total_assessed,
+      lot_count:      f.properties.lot_count,
+      borocode:       f.properties.borocode       || null,
+      sample_address: f.properties.sample_address || null,
+      block:          f.properties.block          || null,
+      point_count:    f.properties.cluster ? f.properties.point_count : 1,
+    }));
     renderData(rows, zoom, valueType);
   }
 }

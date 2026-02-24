@@ -410,7 +410,6 @@ async function fetchLots(bounds) {
 
 async function apiFetch(params) {
   const url = `${PLUTO_API}?${params}`;
-  console.debug('[nyc-heatmap] GET', url);
   const resp = await fetch(url);
   if (!resp.ok) {
     let detail = '';
@@ -577,6 +576,7 @@ function buildClusterIndex(blocks) {
       lot_count:      b.lot_count,
       borocode:       b.borocode,
       sample_address: b.sample_address,
+      block:          b.block,
     },
   }));
   clusterIndex = new Supercluster({
@@ -646,6 +646,7 @@ async function doFetch() {
       lot_count:      f.properties.lot_count,
       borocode:       f.properties.borocode       || null,
       sample_address: f.properties.sample_address || null,
+      block:          f.properties.block          || null,
       point_count:    f.properties.cluster ? f.properties.point_count : 1,
     }));
     renderData(rows, zoom, valueType);

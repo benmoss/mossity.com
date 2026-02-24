@@ -299,6 +299,7 @@
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
+<script src="https://unpkg.com/supercluster@8/dist/supercluster.min.js"></script>
 
 <script>
 // ============================================================
@@ -307,8 +308,6 @@
 const PLUTO_API       = 'https://data.cityofnewyork.us/resource/64uk-42ks.json';
 const MIN_ZOOM        = 11;   // below this: show "zoom in" message
 const LOT_ZOOM        = 15;   // above this: show individual lots instead of blocks
-const GRID_ZOOM       = 13;   // below this zoom: aggregate blocks into grid cells
-const GRID_SIZE       = 0.05; // grid cell size in degrees (~3.5 miles per side)
 
 const BOROUGH_NAMES = {
   '1': 'Manhattan',
@@ -551,41 +550,6 @@ async function loadStaticBlocks() {
 }
 
 // ============================================================
-// Grid aggregation
-// ============================================================
-function aggregateToGrid(blocks, cellSize) {
-  const cells = new Map();
-  for (const b of blocks) {
-    const keyLat = Math.floor(b.lat / cellSize);
-    const keyLng = Math.floor(b.lng / cellSize);
-    const key    = `${keyLat},${keyLng}`;
-    if (!cells.has(key)) {
-      cells.set(key, {
-        lats: [], lngs: [],
-        total_assessed: 0,
-        lot_count:      0,
-        sample_address: b.sample_address,
-        borocode:       b.borocode,
-      });
-    }
-    const c = cells.get(key);
-    c.lats.push(b.lat);
-    c.lngs.push(b.lng);
-    c.total_assessed += b.total_assessed;
-    c.lot_count      += b.lot_count;
-  }
-  return Array.from(cells.values()).map(c => ({
-    lat:            c.lats.reduce((a, v) => a + v, 0) / c.lats.length,
-    lng:            c.lngs.reduce((a, v) => a + v, 0) / c.lngs.length,
-    total_assessed: c.total_assessed,
-    lot_count:      c.lot_count,
-    sample_address: c.sample_address,
-    borocode:       c.borocode,
-    block:          null,
-  }));
-}
-
-// ============================================================
 // Load orchestration
 // ============================================================
 let fetchTimer = null;
@@ -627,15 +591,12 @@ async function doFetch() {
     }
   } else {
     if (!allBlocks) return;
-    const sw      = bounds.getSouthWest();
-    const ne      = bounds.getNorthEast();
-    const visible = allBlocks.filter(b =>
+    const sw   = bounds.getSouthWest();
+    const ne   = bounds.getNorthEast();
+    const rows = allBlocks.filter(b =>
       b.lat >= sw.lat && b.lat <= ne.lat &&
       b.lng >= sw.lng && b.lng <= ne.lng
     );
-    const rows = zoom < GRID_ZOOM
-      ? aggregateToGrid(visible, GRID_SIZE)
-      : visible;
     renderData(rows, zoom, valueType);
   }
 }

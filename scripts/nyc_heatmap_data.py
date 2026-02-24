@@ -3,9 +3,9 @@
 NYC Property Heatmap — Data Fetcher
 ====================================
 Downloads NYC MapPLUTO data from NYC Open Data and aggregates by block.
-Outputs a JSON file consumable by the heatmap visualization, but the
-interactive map fetches live data anyway — this script is useful for
-offline analysis or pre-generating a static snapshot.
+Outputs static/nyc-heatmap/data/blocks.json, which is loaded once by the
+interactive map for block-level rendering. Re-run annually when PLUTO data
+is refreshed (the dataset updates roughly once a year).
 
 Data source:
   NYC MapPLUTO (Primary Land Use Tax Lot Output)

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NYC Property Values — Block-by-Block Heatmap</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111827;
+      color: #e5e7eb;
+    }
+
+    /* ── Header ── */
+    #header {
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 1000;
+      background: rgba(17, 24, 39, 0.93);
+      backdrop-filter: blur(12px);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      height: 50px;
+    }
+
+    #header h1 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f9fafb;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    #header .subtitle {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.4);
+    }
+
+    #controls {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #controls label {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+    }
+
+    #controls select {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #f9fafb;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    #controls select:hover { background: rgba(255,255,255,0.14); }
+
+    /* ── Map ── */
+    #map {
+      position: fixed;
+      top: 50px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    /* ── Loading ── */
+    #loading {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1001;
+      background: rgba(17,24,39,0.92);
+      backdrop-filter: blur(8px);
+      padding: 7px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.75);
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .spinner {
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #60a5fa;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Zoom message ── */
+    #zoom-msg {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1001;
+      background: rgba(17,24,39,0.88);
+      backdrop-filter: blur(8px);
+      padding: 14px 22px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      text-align: center;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.6);
+      pointer-events: none;
+      display: none;
+    }
+
+    /* ── Error banner ── */
+    #error-banner {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1002;
+      background: rgba(153,27,27,0.93);
+      padding: 7px 16px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      color: #fecaca;
+      display: none;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    /* ── Legend ── */
+    #legend {
+      position: fixed;
+      bottom: 24px;
+      right: 16px;
+      z-index: 1000;
+      background: rgba(17,24,39,0.92);
+      backdrop-filter: blur(10px);
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      min-width: 210px;
+    }
+
+    .legend-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 7px;
+    }
+
+    .legend-bar {
+      height: 10px;
+      border-radius: 5px;
+      margin-bottom: 5px;
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.67rem;
+      color: rgba(255,255,255,0.5);
+    }
+
+    /* ── Stats panel ── */
+    #stats {
+      position: fixed;
+      bottom: 24px;
+      left: 16px;
+      z-index: 1000;
+      background: rgba(17,24,39,0.92);
+      backdrop-filter: blur(10px);
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.5);
+      min-width: 165px;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 4px;
+    }
+
+    .stat-row:last-child { margin-bottom: 0; }
+
+    .stat-value {
+      color: rgba(255,255,255,0.85);
+      font-weight: 600;
+    }
+
+    /* ── Leaflet popup override ── */
+    .leaflet-popup-content-wrapper {
+      border-radius: 10px;
+      font-size: 0.82rem;
+    }
+
+    .leaflet-popup-content { margin: 10px 14px; }
+
+    .popup-address {
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+      color: #1e293b;
+    }
+
+    .popup-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .popup-table td { padding: 2px 0; }
+    .popup-table td:last-child { text-align: right; font-weight: 600; }
+
+    .popup-divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 6px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="header">
+  <h1>NYC Property Values</h1>
+  <span class="subtitle">Assessed value · block by block · NYC MapPLUTO</span>
+  <div id="controls">
+    <label for="value-type">Color by</label>
+    <select id="value-type">
+      <option value="total">Block total</option>
+      <option value="avg">Avg per lot</option>
+    </select>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  Loading property data…
+</div>
+
+<div id="zoom-msg">Zoom in to see block-level property data</div>
+
+<div id="error-banner"></div>
+
+<div id="legend">
+  <div class="legend-title" id="legend-title">Block Total Assessment</div>
+  <div class="legend-bar" id="legend-bar"></div>
+  <div class="legend-labels" id="legend-labels"></div>
+</div>
+
+<div id="stats">
+  <div class="stat-row">
+    <span>Blocks visible</span>
+    <span class="stat-value" id="stat-blocks">—</span>
+  </div>
+  <div class="stat-row">
+    <span>Total assessed</span>
+    <span class="stat-value" id="stat-total">—</span>
+  </div>
+  <div class="stat-row">
+    <span>Median block</span>
+    <span class="stat-value" id="stat-median">—</span>
+  </div>
+</div>
+
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs="
+  crossorigin=""
+></script>
+
+<script>
+// ============================================================
+// Config
+// ============================================================
+const PLUTO_API       = 'https://data.cityofnewyork.us/resource/64uk-42ks.json';
+const MIN_ZOOM        = 11;   // below this: show "zoom in" message
+const LOT_ZOOM        = 15;   // above this: show individual lots instead of blocks
+
+const BOROUGH_NAMES = {
+  '1': 'Manhattan',
+  '2': 'Bronx',
+  '3': 'Brooklyn',
+  '4': 'Queens',
+  '5': 'Staten Island',
+};
+
+// ============================================================
+// Color scale — RdYlBu diverging, reversed (blue=low → red=high)
+// ============================================================
+const COLORMAP = [
+  [49,  54,  149],   // #313695  very low
+  [69,  117, 180],   // #4575b4
+  [116, 173, 209],   // #74add1
+  [171, 217, 233],   // #abd9e9
+  [255, 255, 191],   // #ffffbf  mid
+  [254, 224, 144],   // #fee090
+  [253, 174, 97],    // #fdae61
+  [244, 109, 67],    // #f46d43
+  [215, 48,  39],    // #d73027
+  [165, 0,   38],    // #a50026  very high
+];
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function valueToColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const n = COLORMAP.length - 1;
+  const i = Math.min(Math.floor(t * n), n - 1);
+  const f = t * n - i;
+  const [r1,g1,b1] = COLORMAP[i];
+  const [r2,g2,b2] = COLORMAP[i + 1];
+  return `rgb(${Math.round(lerp(r1,r2,f))},${Math.round(lerp(g1,g2,f))},${Math.round(lerp(b1,b2,f))})`;
+}
+
+function logNorm(value, min, max) {
+  if (value <= 0) return 0;
+  const lo = Math.log10(Math.max(min, 1));
+  const hi = Math.log10(Math.max(max, 1));
+  if (hi <= lo) return 0.5;
+  return Math.max(0, Math.min(1, (Math.log10(Math.max(value, 1)) - lo) / (hi - lo)));
+}
+
+function fmt(v) {
+  v = parseFloat(v);
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
+}
+
+// ============================================================
+// Map init
+// ============================================================
+const map = L.map('map', {
+  center: [40.7128, -74.006],
+  zoom: 12,
+  zoomControl: true,
+});
+
+// CartoDB dark basemap (uses OSM data, great contrast for our heatmap)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
+    '&copy; <a href="https://carto.com/attributions">CARTO</a> | ' +
+    'Property data: <a href="https://data.cityofnewyork.us">NYC Open Data</a>',
+  subdomains: 'abcd',
+  maxZoom: 20,
+}).addTo(map);
+
+const markersLayer = L.layerGroup().addTo(map);
+
+// ============================================================
+// Data fetching
+// ============================================================
+async function fetchBlocks(bounds) {
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+  const p = new URLSearchParams({
+    '$select': [
+      'boro',
+      'block',
+      'avg(latitude)  as lat',
+      'avg(longitude) as lng',
+      'sum(assesstot) as total_assessed',
+      'count(bbl)     as lot_count',
+      'max(address)   as sample_address',
+    ].join(','),
+    '$group': 'boro,block',
+    '$where': `latitude  between ${sw.lat} and ${ne.lat}` +
+              ` AND longitude between ${sw.lng} and ${ne.lng}` +
+              ` AND assesstot > 0`,
+    '$limit': '10000',
+  });
+  return apiFetch(p);
+}
+
+async function fetchLots(bounds) {
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+  const p = new URLSearchParams({
+    '$select': [
+      'latitude  as lat',
+      'longitude as lng',
+      'assesstot as total_assessed',
+      'address   as sample_address',
+      'block',
+      'boro',
+      'zipcode',
+    ].join(','),
+    '$where': `latitude  between ${sw.lat} and ${ne.lat}` +
+              ` AND longitude between ${sw.lng} and ${ne.lng}` +
+              ` AND assesstot > 0`,
+    '$limit':  '5000',
+    '$order':  'assesstot DESC',
+  });
+  const rows = await apiFetch(p);
+  return rows.map(r => ({ ...r, lot_count: '1' }));
+}
+
+async function apiFetch(params) {
+  const url = `${PLUTO_API}?${params}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`NYC Open Data API returned HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.error) throw new Error(data.message || 'API error');
+  return data;
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function renderData(rows, zoom, valueType) {
+  markersLayer.clearLayers();
+
+  if (!rows.length) {
+    updateStats(0, 0, 0);
+    return;
+  }
+
+  const getValue = r => {
+    const total = parseFloat(r.total_assessed) || 0;
+    const n     = parseInt(r.lot_count, 10) || 1;
+    return valueType === 'avg' ? total / n : total;
+  };
+
+  const values = rows.map(getValue).filter(v => v > 0);
+  if (!values.length) return;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const isLotView = zoom >= LOT_ZOOM;
+
+  // Radius that scales with zoom
+  const radius = Math.max(3, Math.min(13, (zoom - 8) * 1.6));
+
+  rows.forEach(r => {
+    const lat = parseFloat(r.lat);
+    const lng = parseFloat(r.lng);
+    if (!lat || !lng) return;
+
+    const value = getValue(r);
+    if (value <= 0) return;
+
+    const t     = logNorm(value, min, max);
+    const color = valueToColor(t);
+    const lots  = parseInt(r.lot_count, 10) || 1;
+
+    const marker = L.circleMarker([lat, lng], {
+      radius,
+      fillColor:   color,
+      color:       'rgba(0,0,0,0.25)',
+      weight:      0.5,
+      fillOpacity: 0.82,
+    });
+
+    const boro = BOROUGH_NAMES[r.boro] || `Boro ${r.boro}`;
+    const addr = r.sample_address || `Block ${r.block}`;
+    const label = isLotView ? 'Assessed value' : 'Block total';
+
+    const popup = `
+      <div class="popup-address">${addr}</div>
+      <hr class="popup-divider" />
+      <table class="popup-table">
+        <tr><td>${label}</td><td>${fmt(r.total_assessed)}</td></tr>
+        ${!isLotView && lots > 1 ? `
+        <tr><td>Lots in block</td><td>${lots.toLocaleString()}</td></tr>
+        <tr><td>Avg per lot</td><td>${fmt(parseFloat(r.total_assessed) / lots)}</td></tr>
+        ` : ''}
+        <tr><td>Borough</td><td>${boro}</td></tr>
+        <tr><td>Block #</td><td>${r.block}</td></tr>
+      </table>
+    `;
+
+    marker.bindPopup(popup);
+    markersLayer.addLayer(marker);
+  });
+
+  updateLegend(min, max, valueType);
+
+  const totalAssessed = rows.reduce((s, r) => s + (parseFloat(r.total_assessed) || 0), 0);
+  const sorted        = [...values].sort((a, b) => a - b);
+  const median        = sorted[Math.floor(sorted.length / 2)] || 0;
+  updateStats(rows.length, totalAssessed, median);
+}
+
+function updateLegend(min, max, valueType) {
+  const lo  = Math.log10(Math.max(min, 1));
+  const hi  = Math.log10(Math.max(max, 1));
+  const N   = 6;
+  const stops = Array.from({ length: N + 1 }, (_, i) => {
+    const t = i / N;
+    return { t, color: valueToColor(t), value: Math.pow(10, lo + t * (hi - lo)) };
+  });
+  const gradient = stops.map(s => s.color).join(', ');
+
+  document.getElementById('legend-title').textContent =
+    valueType === 'avg' ? 'Avg Assessment / Lot' : 'Total Block Assessment';
+  document.getElementById('legend-bar').style.background =
+    `linear-gradient(to right, ${gradient})`;
+  document.getElementById('legend-labels').innerHTML =
+    stops.filter((_, i) => i % 2 === 0 || i === N)
+         .map(s => `<span>${fmt(s.value)}</span>`)
+         .join('');
+}
+
+function updateStats(blockCount, total, median) {
+  document.getElementById('stat-blocks').textContent = blockCount ? blockCount.toLocaleString() : '—';
+  document.getElementById('stat-total').textContent  = blockCount ? fmt(total)  : '—';
+  document.getElementById('stat-median').textContent = blockCount ? fmt(median) : '—';
+}
+
+// ============================================================
+// Load orchestration
+// ============================================================
+let fetchTimer = null;
+
+function scheduleFetch() {
+  clearTimeout(fetchTimer);
+  fetchTimer = setTimeout(doFetch, 350);
+}
+
+async function doFetch() {
+  const zoom = map.getZoom();
+
+  document.getElementById('zoom-msg').style.display =
+    zoom < MIN_ZOOM ? 'block' : 'none';
+
+  if (zoom < MIN_ZOOM) {
+    markersLayer.clearLayers();
+    updateStats(0, 0, 0);
+    return;
+  }
+
+  document.getElementById('loading').style.display       = 'flex';
+  document.getElementById('error-banner').style.display  = 'none';
+
+  try {
+    const bounds    = map.getBounds();
+    const valueType = document.getElementById('value-type').value;
+    const rows      = zoom >= LOT_ZOOM
+      ? await fetchLots(bounds)
+      : await fetchBlocks(bounds);
+    renderData(rows, zoom, valueType);
+  } catch (err) {
+    console.error(err);
+    const banner = document.getElementById('error-banner');
+    banner.textContent = `Could not load data: ${err.message}`;
+    banner.style.display = 'block';
+    setTimeout(() => { banner.style.display = 'none'; }, 7000);
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+
+// ============================================================
+// Event wiring
+// ============================================================
+map.on('moveend', scheduleFetch);
+map.on('zoomend', scheduleFetch);
+document.getElementById('value-type').addEventListener('change', () => {
+  clearTimeout(fetchTimer);
+  doFetch();
+});
+
+// Kick off initial load
+scheduleFetch();
+</script>
+</body>
+</html>

@@ -556,9 +556,9 @@ async function loadStaticBlocks() {
 function aggregateToGrid(blocks, cellSize) {
   const cells = new Map();
   for (const b of blocks) {
-    const cellLat = Math.floor(b.lat / cellSize) * cellSize;
-    const cellLng = Math.floor(b.lng / cellSize) * cellSize;
-    const key     = `${cellLat},${cellLng}`;
+    const keyLat = Math.floor(b.lat / cellSize);
+    const keyLng = Math.floor(b.lng / cellSize);
+    const key    = `${keyLat},${keyLng}`;
     if (!cells.has(key)) {
       cells.set(key, {
         lats: [], lngs: [],
@@ -581,6 +581,7 @@ function aggregateToGrid(blocks, cellSize) {
     lot_count:      c.lot_count,
     sample_address: c.sample_address,
     borocode:       c.borocode,
+    block:          null,
   }));
 }
 

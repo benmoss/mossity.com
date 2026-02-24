@@ -627,12 +627,15 @@ async function doFetch() {
     }
   } else {
     if (!allBlocks) return;
-    const sw   = bounds.getSouthWest();
-    const ne   = bounds.getNorthEast();
-    const rows = allBlocks.filter(b =>
+    const sw      = bounds.getSouthWest();
+    const ne      = bounds.getNorthEast();
+    const visible = allBlocks.filter(b =>
       b.lat >= sw.lat && b.lat <= ne.lat &&
       b.lng >= sw.lng && b.lng <= ne.lng
     );
+    const rows = zoom < GRID_ZOOM
+      ? aggregateToGrid(visible, GRID_SIZE)
+      : visible;
     renderData(rows, zoom, valueType);
   }
 }

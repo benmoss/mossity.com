@@ -620,7 +620,7 @@ async function doFetch() {
     const ne       = bounds.getNorthEast();
     const features = clusterIndex.getClusters(
       [sw.lng, sw.lat, ne.lng, ne.lat],
-      Math.round(zoom)
+      Math.floor(zoom)
     );
     const rows = features.map(f => ({
       lat:            f.geometry.coordinates[1],
@@ -629,7 +629,6 @@ async function doFetch() {
       lot_count:      f.properties.lot_count,
       borocode:       f.properties.borocode       || null,
       sample_address: f.properties.sample_address || null,
-      block:          f.properties.block          || null,
       point_count:    f.properties.cluster ? f.properties.point_count : 1,
     }));
     renderData(rows, zoom, valueType);

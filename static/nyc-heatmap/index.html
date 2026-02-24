@@ -384,28 +384,6 @@ const markersLayer = L.layerGroup().addTo(map);
 // ============================================================
 // Data fetching
 // ============================================================
-async function fetchBlocks(bounds) {
-  const sw = bounds.getSouthWest();
-  const ne = bounds.getNorthEast();
-  const p = new URLSearchParams({
-    '$select': [
-      'borocode',
-      'block',
-      'avg(latitude)  as lat',
-      'avg(longitude) as lng',
-      'sum(assesstot) as total_assessed',
-      'count(bbl)     as lot_count',
-      'max(address)   as sample_address',
-    ].join(','),
-    '$group': 'borocode,block',
-    '$where': `latitude  between ${sw.lat} and ${ne.lat}` +
-              ` AND longitude between ${sw.lng} and ${ne.lng}` +
-              ` AND assesstot > 0`,
-    '$limit': '10000',
-  });
-  return apiFetch(p);
-}
-
 async function fetchLots(bounds) {
   const sw = bounds.getSouthWest();
   const ne = bounds.getNorthEast();

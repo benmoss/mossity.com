@@ -570,12 +570,11 @@ async function doFetch() {
     return;
   }
 
-  document.getElementById('error-banner').style.display = 'none';
-
   const bounds    = map.getBounds();
   const valueType = document.getElementById('value-type').value;
 
   if (zoom >= LOT_ZOOM) {
+    document.getElementById('error-banner').style.display = 'none';
     document.getElementById('loading').style.display = 'flex';
     try {
       const rows = await fetchLots(bounds);

@@ -307,7 +307,7 @@
 // ============================================================
 const PLUTO_API       = 'https://data.cityofnewyork.us/resource/64uk-42ks.json';
 const MIN_ZOOM        = 11;   // below this: show "zoom in" message
-const LOT_ZOOM        = 15;   // above this: show individual lots instead of blocks
+const LOT_ZOOM        = 17;   // above this: show individual lots instead of blocks
 
 const BOROUGH_NAMES = {
   '1': 'Manhattan',
@@ -441,9 +441,14 @@ function renderData(rows, zoom, valueType) {
   const values = rows.map(getValue).filter(v => v > 0);
   if (!values.length) return;
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
   const isLotView = zoom >= LOT_ZOOM;
+
+  // Use a fixed global scale for block/cluster view so colors don't shift on pan/zoom.
+  // Lot view recalculates per-viewport since individual lot values differ from block totals.
+  const range = (!isLotView && globalRange)
+    ? globalRange[valueType]
+    : { min: Math.min(...values), max: Math.max(...values) };
+  const { min, max } = range;
 
   // Radius that scales with zoom
   const radius = Math.max(3, Math.min(13, (zoom - 8) * 1.6));
@@ -546,6 +551,7 @@ function updateStats(blockCount, total, median) {
 // ============================================================
 let allBlocks    = null;
 let clusterIndex = null;
+let globalRange  = null; // { total: {min,max}, avg: {min,max} } — fixed scale for block/cluster view
 
 async function loadStaticBlocks() {
   document.getElementById('loading').style.display = 'flex';
@@ -556,6 +562,7 @@ async function loadStaticBlocks() {
     if (!Array.isArray(data.blocks)) throw new Error('Unexpected data format');
     allBlocks = data.blocks;
     buildClusterIndex(allBlocks);
+    buildGlobalRange(allBlocks);
   } catch (err) {
     console.error('Could not load static block data:', err);
     const banner = document.getElementById('error-banner');
@@ -565,6 +572,21 @@ async function loadStaticBlocks() {
   } finally {
     document.getElementById('loading').style.display = 'none';
   }
+}
+
+function buildGlobalRange(blocks) {
+  let totalMin = Infinity, totalMax = -Infinity;
+  let avgMin   = Infinity, avgMax   = -Infinity;
+  for (const b of blocks) {
+    const total = b.total_assessed;
+    const avg   = total / (b.lot_count || 1);
+    if (total > 0) { if (total < totalMin) totalMin = total; if (total > totalMax) totalMax = total; }
+    if (avg   > 0) { if (avg   < avgMin)   avgMin   = avg;   if (avg   > avgMax)   avgMax   = avg;   }
+  }
+  globalRange = {
+    total: { min: totalMin, max: totalMax },
+    avg:   { min: avgMin,   max: avgMax   },
+  };
 }
 
 function buildClusterIndex(blocks) {

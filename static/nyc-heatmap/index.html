@@ -457,33 +457,50 @@ function renderData(rows, zoom, valueType) {
     const value = getValue(r);
     if (value <= 0) return;
 
-    const t     = logNorm(value, min, max);
-    const color = valueToColor(t);
-    const lots  = parseInt(r.lot_count, 10) || 1;
+    const t         = logNorm(value, min, max);
+    const color     = valueToColor(t);
+    const lots      = parseInt(r.lot_count, 10) || 1;
+    const isCluster = (r.point_count || 1) > 1;
 
-    const marker = L.circleMarker([lat, lng], {
-      radius,
-      fillColor:   color,
-      color:       'rgba(0,0,0,0.25)',
-      weight:      0.5,
-      fillOpacity: 0.82,
-    });
+    let marker;
+    if (isCluster) {
+      const size = Math.max(16, Math.min(40, radius * 2));
+      const icon = L.divIcon({
+        html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:${Math.max(9, Math.round(size * 0.35))}px;border:1.5px solid rgba(0,0,0,0.3);box-shadow:0 1px 3px rgba(0,0,0,0.4)">${r.point_count}</div>`,
+        className:  '',
+        iconSize:   [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+      marker = L.marker([lat, lng], { icon });
+    } else {
+      marker = L.circleMarker([lat, lng], {
+        radius,
+        fillColor:   color,
+        color:       'rgba(0,0,0,0.25)',
+        weight:      0.5,
+        fillOpacity: 0.82,
+      });
+    }
 
-    const boro = BOROUGH_NAMES[String(r.borocode)] || `Boro ${r.borocode}`;
-    const addr = r.sample_address || `Block ${r.block}`;
-    const label = isLotView ? 'Assessed value' : 'Block total';
-
-    const popup = `
-      <div class="popup-address">${addr}</div>
+    const popup = isCluster ? `
+      <div class="popup-address">${r.point_count} blocks</div>
       <hr class="popup-divider" />
       <table class="popup-table">
-        <tr><td>${label}</td><td>${fmt(r.total_assessed)}</td></tr>
+        <tr><td>Total assessed</td><td>${fmt(r.total_assessed)}</td></tr>
+        <tr><td>Blocks</td><td>${r.point_count.toLocaleString()}</td></tr>
+        <tr><td>Avg per block</td><td>${fmt(parseFloat(r.total_assessed) / r.point_count)}</td></tr>
+      </table>
+    ` : `
+      <div class="popup-address">${r.sample_address || `Block ${r.block}`}</div>
+      <hr class="popup-divider" />
+      <table class="popup-table">
+        <tr><td>${isLotView ? 'Assessed value' : 'Block total'}</td><td>${fmt(r.total_assessed)}</td></tr>
         ${!isLotView && lots > 1 ? `
         <tr><td>Lots in block</td><td>${lots.toLocaleString()}</td></tr>
         <tr><td>Avg per lot</td><td>${fmt(parseFloat(r.total_assessed) / lots)}</td></tr>
         ` : ''}
-        <tr><td>Borough</td><td>${boro}</td></tr>
-        <tr><td>Block #</td><td>${r.block}</td></tr>
+        <tr><td>Borough</td><td>${BOROUGH_NAMES[String(r.borocode)] || `Boro ${r.borocode}`}</td></tr>
+        ${r.block != null ? `<tr><td>Block #</td><td>${r.block}</td></tr>` : ''}
       </table>
     `;
 

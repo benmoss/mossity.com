@@ -557,12 +557,14 @@ async function loadStaticBlocks() {
     const resp = await fetch('/nyc-heatmap/data/blocks.json');
     if (!resp.ok) throw new Error(`Failed to load block data: HTTP ${resp.status}`);
     const data = await resp.json();
+    if (!Array.isArray(data.blocks)) throw new Error('Unexpected data format');
     allBlocks = data.blocks;
   } catch (err) {
     console.error('Could not load static block data:', err);
     const banner = document.getElementById('error-banner');
     banner.textContent = `Could not load map data: ${err.message}`;
     banner.style.display = 'block';
+    setTimeout(() => { banner.style.display = 'none'; }, 7000);
   } finally {
     document.getElementById('loading').style.display = 'none';
   }

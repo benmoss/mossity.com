@@ -162,7 +162,7 @@ def aggregate_by_block(records: list[dict]) -> list[dict]:
             "total_assessed": round(total),
             "avg_assessed":   round(total / n),
             "lot_count":      n,
-            "boro":           b["boro"],
+            "borocode":       b["boro"],
             "boro_name":      BOROUGH_NAMES.get(b["boro"], "Unknown"),
             "block":          b["block"],
             "sample_address": b["addresses"][0] if b["addresses"] else None,

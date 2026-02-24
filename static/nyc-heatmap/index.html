@@ -547,6 +547,28 @@ function updateStats(blockCount, total, median) {
 }
 
 // ============================================================
+// Static block data
+// ============================================================
+let allBlocks = null;
+
+async function loadStaticBlocks() {
+  document.getElementById('loading').style.display = 'flex';
+  try {
+    const resp = await fetch('/nyc-heatmap/data/blocks.json');
+    if (!resp.ok) throw new Error(`Failed to load block data: HTTP ${resp.status}`);
+    const data = await resp.json();
+    allBlocks = data.blocks;
+  } catch (err) {
+    console.error('Could not load static block data:', err);
+    const banner = document.getElementById('error-banner');
+    banner.textContent = `Could not load map data: ${err.message}`;
+    banner.style.display = 'block';
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+
+// ============================================================
 // Load orchestration
 // ============================================================
 let fetchTimer = null;
@@ -568,24 +590,34 @@ async function doFetch() {
     return;
   }
 
-  document.getElementById('loading').style.display       = 'flex';
-  document.getElementById('error-banner').style.display  = 'none';
+  document.getElementById('error-banner').style.display = 'none';
 
-  try {
-    const bounds    = map.getBounds();
-    const valueType = document.getElementById('value-type').value;
-    const rows      = zoom >= LOT_ZOOM
-      ? await fetchLots(bounds)
-      : await fetchBlocks(bounds);
+  const bounds    = map.getBounds();
+  const valueType = document.getElementById('value-type').value;
+
+  if (zoom >= LOT_ZOOM) {
+    document.getElementById('loading').style.display = 'flex';
+    try {
+      const rows = await fetchLots(bounds);
+      renderData(rows, zoom, valueType);
+    } catch (err) {
+      console.error(err);
+      const banner = document.getElementById('error-banner');
+      banner.textContent = `Could not load data: ${err.message}`;
+      banner.style.display = 'block';
+      setTimeout(() => { banner.style.display = 'none'; }, 7000);
+    } finally {
+      document.getElementById('loading').style.display = 'none';
+    }
+  } else {
+    if (!allBlocks) return;
+    const sw   = bounds.getSouthWest();
+    const ne   = bounds.getNorthEast();
+    const rows = allBlocks.filter(b =>
+      b.lat >= sw.lat && b.lat <= ne.lat &&
+      b.lng >= sw.lng && b.lng <= ne.lng
+    );
     renderData(rows, zoom, valueType);
-  } catch (err) {
-    console.error(err);
-    const banner = document.getElementById('error-banner');
-    banner.textContent = `Could not load data: ${err.message}`;
-    banner.style.display = 'block';
-    setTimeout(() => { banner.style.display = 'none'; }, 7000);
-  } finally {
-    document.getElementById('loading').style.display = 'none';
   }
 }
 
@@ -599,8 +631,8 @@ document.getElementById('value-type').addEventListener('change', () => {
   doFetch();
 });
 
-// Kick off initial load
-scheduleFetch();
+// Load static block data, then start rendering
+loadStaticBlocks().then(scheduleFetch);
 </script>
 </body>
 </html>

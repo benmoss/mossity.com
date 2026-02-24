@@ -575,17 +575,14 @@ async function loadStaticBlocks() {
 }
 
 function buildGlobalRange(blocks) {
-  let totalMin = Infinity, totalMax = -Infinity;
-  let avgMin   = Infinity, avgMax   = -Infinity;
-  for (const b of blocks) {
-    const total = b.total_assessed;
-    const avg   = total / (b.lot_count || 1);
-    if (total > 0) { if (total < totalMin) totalMin = total; if (total > totalMax) totalMax = total; }
-    if (avg   > 0) { if (avg   < avgMin)   avgMin   = avg;   if (avg   > avgMax)   avgMax   = avg;   }
-  }
+  const pct = (arr, p) => arr[Math.floor(arr.length * p / 100)];
+  const totals = blocks.map(b => b.total_assessed).filter(v => v > 0).sort((a, b) => a - b);
+  const avgs   = blocks.map(b => b.total_assessed / (b.lot_count || 1)).filter(v => v > 0).sort((a, b) => a - b);
+  // Anchor at p5–p95 so outliers don't compress the middle of the scale.
+  // Values outside this range clamp to full blue/red via logNorm's Math.max/min.
   globalRange = {
-    total: { min: totalMin, max: totalMax },
-    avg:   { min: avgMin,   max: avgMax   },
+    total: { min: pct(totals, 5), max: pct(totals, 95) },
+    avg:   { min: pct(avgs,   5), max: pct(avgs,   95) },
   };
 }
 

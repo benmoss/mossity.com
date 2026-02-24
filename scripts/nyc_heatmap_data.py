@@ -63,14 +63,14 @@ def fetch_batch(offset: int, boro: str | None, retries: int = 4) -> list[dict]:
         "longitude IS NOT NULL",
     ]
     if boro:
-        conditions.append(f"boro = '{boro}'")
+        conditions.append(f"borocode = '{boro}'")
 
     params = {
         "$limit":  BATCH_SIZE,
         "$offset": offset,
         "$select": (
             "latitude,longitude,assesstot,assessland,"
-            "block,lot,boro,zipcode,address,landuse,unitstotal"
+            "block,lot,borocode,zipcode,address,landuse,unitstotal"
         ),
         "$where": " AND ".join(conditions),
         "$order": "bbl ASC",
@@ -134,7 +134,7 @@ def aggregate_by_block(records: list[dict]) -> list[dict]:
             skipped += 1
             continue
 
-        boro  = r.get("boro",  "0")
+        boro  = r.get("borocode",  "0")
         block = r.get("block", "0")
         key   = f"{boro}-{block}"
         b     = blocks[key]

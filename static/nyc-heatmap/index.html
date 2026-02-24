@@ -296,7 +296,7 @@
 
 <script
   src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs="
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
 
@@ -389,7 +389,7 @@ async function fetchBlocks(bounds) {
   const ne = bounds.getNorthEast();
   const p = new URLSearchParams({
     '$select': [
-      'boro',
+      'borocode',
       'block',
       'avg(latitude)  as lat',
       'avg(longitude) as lng',
@@ -397,7 +397,7 @@ async function fetchBlocks(bounds) {
       'count(bbl)     as lot_count',
       'max(address)   as sample_address',
     ].join(','),
-    '$group': 'boro,block',
+    '$group': 'borocode,block',
     '$where': `latitude  between ${sw.lat} and ${ne.lat}` +
               ` AND longitude between ${sw.lng} and ${ne.lng}` +
               ` AND assesstot > 0`,
@@ -416,7 +416,7 @@ async function fetchLots(bounds) {
       'assesstot as total_assessed',
       'address   as sample_address',
       'block',
-      'boro',
+      'borocode',
       'zipcode',
     ].join(','),
     '$where': `latitude  between ${sw.lat} and ${ne.lat}` +
@@ -431,8 +431,13 @@ async function fetchLots(bounds) {
 
 async function apiFetch(params) {
   const url = `${PLUTO_API}?${params}`;
+  console.debug('[nyc-heatmap] GET', url);
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`NYC Open Data API returned HTTP ${resp.status}`);
+  if (!resp.ok) {
+    let detail = '';
+    try { const e = await resp.json(); detail = e.message || e.errorCode || ''; } catch {}
+    throw new Error(`NYC Open Data API returned HTTP ${resp.status}${detail ? ': ' + detail : ''}`);
+  }
   const data = await resp.json();
   if (data.error) throw new Error(data.message || 'API error');
   return data;
@@ -485,7 +490,7 @@ function renderData(rows, zoom, valueType) {
       fillOpacity: 0.82,
     });
 
-    const boro = BOROUGH_NAMES[r.boro] || `Boro ${r.boro}`;
+    const boro = BOROUGH_NAMES[String(r.borocode)] || `Boro ${r.borocode}`;
     const addr = r.sample_address || `Block ${r.block}`;
     const label = isLotView ? 'Assessed value' : 'Block total';
 

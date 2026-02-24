@@ -307,6 +307,8 @@
 const PLUTO_API       = 'https://data.cityofnewyork.us/resource/64uk-42ks.json';
 const MIN_ZOOM        = 11;   // below this: show "zoom in" message
 const LOT_ZOOM        = 15;   // above this: show individual lots instead of blocks
+const GRID_ZOOM       = 13;   // below this zoom: aggregate blocks into grid cells
+const GRID_SIZE       = 0.05; // grid cell size in degrees (~3.5 miles per side)
 
 const BOROUGH_NAMES = {
   '1': 'Manhattan',
@@ -546,6 +548,40 @@ async function loadStaticBlocks() {
   } finally {
     document.getElementById('loading').style.display = 'none';
   }
+}
+
+// ============================================================
+// Grid aggregation
+// ============================================================
+function aggregateToGrid(blocks, cellSize) {
+  const cells = new Map();
+  for (const b of blocks) {
+    const cellLat = Math.floor(b.lat / cellSize) * cellSize;
+    const cellLng = Math.floor(b.lng / cellSize) * cellSize;
+    const key     = `${cellLat},${cellLng}`;
+    if (!cells.has(key)) {
+      cells.set(key, {
+        lats: [], lngs: [],
+        total_assessed: 0,
+        lot_count:      0,
+        sample_address: b.sample_address,
+        borocode:       b.borocode,
+      });
+    }
+    const c = cells.get(key);
+    c.lats.push(b.lat);
+    c.lngs.push(b.lng);
+    c.total_assessed += b.total_assessed;
+    c.lot_count      += b.lot_count;
+  }
+  return Array.from(cells.values()).map(c => ({
+    lat:            c.lats.reduce((a, v) => a + v, 0) / c.lats.length,
+    lng:            c.lngs.reduce((a, v) => a + v, 0) / c.lngs.length,
+    total_assessed: c.total_assessed,
+    lot_count:      c.lot_count,
+    sample_address: c.sample_address,
+    borocode:       c.borocode,
+  }));
 }
 
 // ============================================================

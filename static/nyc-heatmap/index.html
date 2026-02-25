@@ -253,13 +253,7 @@
 <div id="header">
   <h1>NYC Property Values</h1>
   <span class="subtitle">Assessed value · block by block · NYC MapPLUTO</span>
-  <div id="controls">
-    <label for="value-type">Color by</label>
-    <select id="value-type">
-      <option value="total">Block total</option>
-      <option value="avg">Avg per lot</option>
-    </select>
-  </div>
+  <div id="controls"></div>
 </div>
 
 <div id="map"></div>
@@ -424,7 +418,7 @@ async function apiFetch(params) {
 // ============================================================
 // Rendering
 // ============================================================
-function renderData(rows, zoom, valueType) {
+function renderData(rows, zoom) {
   markersLayer.clearLayers();
 
   if (!rows.length) {
@@ -435,7 +429,7 @@ function renderData(rows, zoom, valueType) {
   const getValue = r => {
     const total = parseFloat(r.total_assessed) || 0;
     const n     = parseInt(r.lot_count, 10) || 1;
-    return valueType === 'avg' ? total / n : total;
+    return total / n;
   };
 
   const values = rows.map(getValue).filter(v => v > 0);
@@ -446,7 +440,7 @@ function renderData(rows, zoom, valueType) {
   // Use a fixed global scale for block/cluster view so colors don't shift on pan/zoom.
   // Lot view recalculates per-viewport since individual lot values differ from block totals.
   const range = (!isLotView && globalRange)
-    ? globalRange[valueType]
+    ? globalRange
     : { min: Math.min(...values), max: Math.max(...values) };
   const { min, max } = range;
 
@@ -512,7 +506,7 @@ function renderData(rows, zoom, valueType) {
     markersLayer.addLayer(marker);
   });
 
-  updateLegend(min, max, valueType);
+  updateLegend(min, max);
 
   const totalAssessed = rows.reduce((s, r) => s + (parseFloat(r.total_assessed) || 0), 0);
   const sorted        = [...values].sort((a, b) => a - b);
@@ -520,7 +514,7 @@ function renderData(rows, zoom, valueType) {
   updateStats(rows.length, totalAssessed, median);
 }
 
-function updateLegend(min, max, valueType) {
+function updateLegend(min, max) {
   const lo  = Math.log10(Math.max(min, 1));
   const hi  = Math.log10(Math.max(max, 1));
   const N   = 6;
@@ -530,8 +524,7 @@ function updateLegend(min, max, valueType) {
   });
   const gradient = stops.map(s => s.color).join(', ');
 
-  document.getElementById('legend-title').textContent =
-    valueType === 'avg' ? 'Avg Assessment / Lot' : 'Total Block Assessment';
+  document.getElementById('legend-title').textContent = 'Avg Assessment / Lot';
   document.getElementById('legend-bar').style.background =
     `linear-gradient(to right, ${gradient})`;
   document.getElementById('legend-labels').innerHTML =
@@ -551,7 +544,7 @@ function updateStats(blockCount, total, median) {
 // ============================================================
 let allBlocks    = null;
 let clusterIndex = null;
-let globalRange  = null; // { total: {min,max}, avg: {min,max} } — fixed scale for block/cluster view
+let globalRange  = null; // {min,max} avg-per-lot — fixed scale for block/cluster view
 
 async function loadStaticBlocks() {
   document.getElementById('loading').style.display = 'flex';
@@ -575,15 +568,10 @@ async function loadStaticBlocks() {
 }
 
 function buildGlobalRange(blocks) {
-  const pct = (arr, p) => arr[Math.floor(arr.length * p / 100)];
-  const totals = blocks.map(b => b.total_assessed).filter(v => v > 0).sort((a, b) => a - b);
-  const avgs   = blocks.map(b => b.total_assessed / (b.lot_count || 1)).filter(v => v > 0).sort((a, b) => a - b);
+  const pct  = (arr, p) => arr[Math.floor(arr.length * p / 100)];
+  const avgs = blocks.map(b => b.total_assessed / (b.lot_count || 1)).filter(v => v > 0).sort((a, b) => a - b);
   // Anchor at p5–p95 so outliers don't compress the middle of the scale.
-  // Values outside this range clamp to full blue/red via logNorm's Math.max/min.
-  globalRange = {
-    total: { min: pct(totals, 5), max: pct(totals, 95) },
-    avg:   { min: pct(avgs,   5), max: pct(avgs,   95) },
-  };
+  globalRange = { min: pct(avgs, 5), max: pct(avgs, 95) };
 }
 
 function buildClusterIndex(blocks) {
@@ -633,14 +621,12 @@ async function doFetch() {
   }
 
   const bounds    = map.getBounds();
-  const valueType = document.getElementById('value-type').value;
-
   if (zoom >= LOT_ZOOM) {
     document.getElementById('error-banner').style.display = 'none';
     document.getElementById('loading').style.display = 'flex';
     try {
       const rows = await fetchLots(bounds);
-      renderData(rows, zoom, valueType);
+      renderData(rows, zoom);
     } catch (err) {
       console.error(err);
       const banner = document.getElementById('error-banner');
@@ -668,7 +654,7 @@ async function doFetch() {
       block:          f.properties.block          || null,
       point_count:    f.properties.cluster ? f.properties.point_count : 1,
     }));
-    renderData(rows, zoom, valueType);
+    renderData(rows, zoom);
   }
 }
 
@@ -677,10 +663,6 @@ async function doFetch() {
 // ============================================================
 map.on('moveend', scheduleFetch);
 map.on('zoomend', scheduleFetch);
-document.getElementById('value-type').addEventListener('change', () => {
-  clearTimeout(fetchTimer);
-  doFetch();
-});
 
 // Load static block data, then start rendering
 loadStaticBlocks().then(scheduleFetch);

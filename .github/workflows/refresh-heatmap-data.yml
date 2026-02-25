@@ -1,0 +1,26 @@
+name: Refresh NYC heatmap data
+
+on:
+  workflow_dispatch:
+  schedule:
+    # First day of each quarter at 06:00 UTC
+    # PLUTO updates annually; quarterly checks catch it promptly.
+    - cron: '0 6 1 1,4,7,10 *'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch latest MapPLUTO block data
+        run: python3 scripts/nyc_heatmap_data.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "Automated"
+          git config user.email "actions@users.noreply.github.com"
+          git add static/nyc-heatmap/data/blocks.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: refresh NYC heatmap blocks.json ($(date -u +%Y-%m-%d))"
+          git push

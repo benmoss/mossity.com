@@ -8,17 +8,17 @@ description = "An interactive heatmap of NYC assessed property values at block-l
 
 **[→ Open the interactive map](/nyc-heatmap/)**
 
-NYC's Department of Finance publishes assessed values for every one of the city's ~850,000 tax lots through the [MapPLUTO dataset](https://data.cityofnewyork.us/City-Government/Primary-Land-Use-Tax-Lot-Output-PLUTO-/64uk-42ks) on NYC Open Data. The map colors each block by its total assessed value on a logarithmic scale (blue = low, red = high).
+Walking around a Brooklyn neighborhood a while back, I kept noticing how much you can read a block just from street level: how well the stoops are kept up, whether people have flower boxes, what cars are parked out front. I got curious whether any of that was actually measurable. NYC's Department of Finance publishes assessed values for every one of the city's ~850,000 tax lots through the [MapPLUTO dataset](https://data.cityofnewyork.us/City-Government/Primary-Land-Use-Tax-Lot-Output-PLUTO-/64uk-42ks) on NYC Open Data. It's not quite the same as sale prices, but it's a reasonable proxy and the data is public and granular. I wanted to see what it looked like on a map.
 
-A few things that stand out:
+Each block is colored by its total assessed value on a logarithmic scale (blue = low, red = high). A few things that stood out:
 
-- **Midtown Manhattan** blocks routinely hit $1–5B in total assessed value — a single city block can be assessed at more than the entire property tax base of a small city.
+- **Midtown Manhattan** blocks routinely hit $1–5B in total assessed value. A single city block can be assessed at more than the entire property tax base of a small city.
 - **The waterfront premium** is clearly visible in both Brooklyn and Queens, where blocks adjacent to the water are noticeably warmer than those a few blocks inland.
 - **The Bronx / Staten Island contrast** with Manhattan is stark. The color scale is logarithmic, so even visually similar blocks can differ by an order of magnitude.
 
 ### How it works
 
-The map uses [Leaflet.js](https://leafletjs.com/) with CartoDB dark tiles. There are three zoom tiers:
+The map uses [Leaflet.js](https://leafletjs.com/) with CartoDB dark tiles and has three zoom tiers:
 
 | Zoom | What you see | Data source |
 |------|-------------|-------------|
@@ -26,21 +26,26 @@ The map uses [Leaflet.js](https://leafletjs.com/) with CartoDB dark tiles. There
 | 11–16 | Clustered circles → individual blocks | Pre-built static JSON |
 | ≥ 17 | Individual tax lots | Live Socrata API |
 
-**Block view (zoom 11–16)** is powered by a pre-aggregated snapshot of all 28,664 NYC blocks (~5 MB JSON, generated from the full 853k-lot dataset). The file is fetched once on page load and stays in memory, so panning and zooming are instant — no round-trips to the API.
+**Block view (zoom 11–16)** is built on a pre-aggregated snapshot of all 28,664 NYC blocks (~5 MB JSON, generated from the full 853k-lot dataset). The file loads once on page load and stays in memory, so panning and zooming are instant with no round-trips to the API.
 
-At city scale (zooms 11–13) the 28k individual block markers would be visually overwhelming, so the map uses [supercluster.js](https://github.com/mapbox/supercluster) to merge nearby blocks into labeled cluster circles. The cluster radius is 60px, and supercluster stops clustering at zoom 14, at which point individual block dots appear. Each cluster circle shows the number of blocks it contains; its color reflects the aggregate assessed value of those blocks, on the same scale as individual blocks.
+At city scale (zooms 11–13), 28k individual block markers would be visually overwhelming, so I use [supercluster.js](https://github.com/mapbox/supercluster) to merge nearby blocks into labeled cluster circles. The cluster radius is 60px, and supercluster stops clustering at zoom 14, where individual block dots appear. Each cluster circle shows the number of blocks it contains and is colored by the aggregate assessed value of those blocks, on the same scale as individual blocks.
 
-**Lot view (zoom ≥ 17)** queries the Socrata API live with a bounding-box `WHERE` filter. At that zoom level the viewport covers only a few blocks, so the query returns quickly and the individual lot granularity is actually useful.
+**Lot view (zoom ≥ 17)** queries the Socrata API live with a bounding-box `WHERE` filter. At that zoom level the viewport covers only a few blocks, so the query is fast and the individual lot granularity is actually useful.
 
-**Color scale:** Assessed values citywide span nearly ten orders of magnitude (a few thousand dollars to $8.7B for a single block). Anchoring the color scale to the absolute extremes would compress 95% of blocks into the yellow middle. Instead, the scale is anchored at the **5th–95th percentile** of all block values ($700K–$75M for total; $44K–$10M for average per lot). Blocks outside that range clamp to solid blue or red. This spreads the bulk of the city's variation across the full RdYlBu palette.
+**Color scale:** Assessed values citywide span nearly ten orders of magnitude (from a few thousand dollars to $8.7B for a single block). Anchoring the color scale to the absolute extremes would compress 95% of blocks into the yellow middle. Instead, I anchored it at the **5th–95th percentile** of all block values ($700K–$75M for total; $44K–$10M for average per lot), so the bulk of the city's variation spreads across the full RdYlBu palette. Blocks outside that range clamp to solid blue or red.
 
 ### Building the block snapshot
 
-The pre-aggregated block data is generated by [scripts/nyc_heatmap_data.py](https://github.com/benmoss/mossity.com/blob/main/scripts/nyc_heatmap_data.py), which fetches the full MapPLUTO dataset from the Socrata API in batches and groups lots by borough+block:
+The pre-aggregated block data comes from [scripts/nyc_heatmap_data.py](https://github.com/benmoss/mossity.com/blob/main/scripts/nyc_heatmap_data.py), which fetches the full MapPLUTO dataset from the Socrata API in batches and groups lots by borough+block:
 
 ```bash
-python scripts/nyc_heatmap_data.py                # all five boroughs → static/nyc-heatmap/data/blocks.json
-python scripts/nyc_heatmap_data.py --boro 1       # Manhattan only
+# All five boroughs
+python scripts/nyc_heatmap_data.py
+
+# Manhattan only
+python scripts/nyc_heatmap_data.py --boro 1
+
+# Specific borough to a custom path
 python scripts/nyc_heatmap_data.py --boro 3 --output /tmp/brooklyn.json
 ```
 

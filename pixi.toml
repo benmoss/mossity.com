@@ -1,4 +1,4 @@
-[project]
+[workspace]
 authors = ["Ben Moss <ben@mossity.com>"]
 channels = ["conda-forge"]
 description = "Add a short description here"
@@ -7,6 +7,7 @@ platforms = ["osx-arm64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
+serve = "hugo serve"
 
 [dependencies]
 hugo = ">=0.143.1,<0.144"

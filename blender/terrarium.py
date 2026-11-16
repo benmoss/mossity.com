@@ -14,6 +14,9 @@
 #   id     flat colors: red = soil, green = wood, black = everything else
 #   grow   a strip of growth frames per mushroom species, in mush/, with
 #          mush.json (run on its own)
+#   rot    the log alone at stages of white rot, cropped to its box
+#   collapse  the rotten log slumping into a heap, as crops of back, front
+#          and id, with the moss on it sunk to match
 # set.json records the frame so the page can line the layers up.
 import bpy, bmesh, json, math, os, random, sys
 from mathutils import Vector, noise
@@ -566,9 +569,11 @@ def moss_clump(cx, cy, cz_fn, n, spread, tag):
         blob(f"caps{tag}-{k}", M["capsule"], (x + lean, y, z + h), (0.003, 0.003, 0.0045), (rnd(-.3, .3), 0, 0),
              subdiv=1, rough=0.1, seed=k, collection="front")
 
+LOG_MOSS = set()  # name prefixes of the moss sitting on the log
 for i in range(34):
     on_log = i % 3 == 0
     if on_log:
+        LOG_MOSS.update((f"moss{i}", f"seta{i}", f"caps{i}"))
         u = rnd(-0.4, 0.4)
         x = LOG_C.x + u * math.cos(math.radians(-30))
         moss_clump(x, rnd(-0.75, -0.45), lambda x, y: log_top(x), 90, rnd(0.06, 0.12), i)
@@ -1254,6 +1259,118 @@ if "rot" in ONLY:
     with open(os.path.join(OUT, "rot.json"), "w") as f:
         json.dump({"n": len(ROT_STAGES), "box": [FRAME["x0"] + i0 * px, FRAME["z0"] + j0 * px,
                                                   FRAME["x0"] + i1 * px, FRAME["z0"] + j1 * px]}, f)
+
+# ---------- the log collapsing ----------
+# Once the wood is eaten through, the log slumps: it squashes toward the
+# ground, most in the middle and at a break, spreads and goes lumpy, and sheds
+# crumbs. The moss on top rides down with it. The whole scene in the log's box
+# is rendered for each stage, as back, front and id crops, so the page can
+# swap the box in and move the sim and the mushrooms onto the new shape.
+COLLAPSE_STAGES = (0.5, 1.0)
+
+def slump(co, c):
+    """A point in the log's local space, collapsed by c (0..1)."""
+    zg = GROUND - LOG_C.z  # the soil line
+    u = co.x / (LOG_LEN / 2)
+    sag = 1 - 0.3 * abs(u) ** 3 + 0.35 * math.exp(-((u - 0.18) / 0.08) ** 2)
+    n = noise.noise(co * 9 + Vector((3.1, 0.7, 5.3)))
+    out = co.copy()
+    out.y *= 1 + 0.3 * c * sag
+    if co.z > zg:
+        out.z = zg + (co.z - zg) * max(0.12, 1 - 0.72 * c * sag) * (1 + 0.22 * c * n)
+    return out
+
+if "collapse" in ONLY:
+    logs = [o for o in ALL if o.name.startswith("log")]
+    moss = [o for o in ALL if o.name.split("-")[0] in LOG_MOSS]
+    base = {o: o.data.materials[0] for o in logs}
+    rot = {o: rotted(base[o], 1.0, end=o.name.startswith("log-end")) for o in logs}
+    for o in logs:
+        o.data.materials[0] = rot[o]
+    rest = {o: [v.co.copy() for v in o.data.vertices] for o in logs}
+    # moss moves by where its root on the log goes
+    bpy.context.view_layer.update()
+    to_local, to_world = log.matrix_world.inverted(), log.matrix_world.copy()
+    roots = {}
+    for o in moss:
+        p = Vector(o.data.splines[0].points[0].co[:3]) if o.type == "CURVE" else o.location.copy()
+        roots[o] = (o.location.copy(), to_local @ p)
+    # crumbs of rotten wood, mostly on the side toward us
+    crng = random.Random(23)
+    crumbs = []
+    for i in range(48):
+        x = crng.uniform(-0.46, 0.46) * LOG_LEN
+        y = -LOG_R * crng.uniform(0.75, 1.35) * (1 if crng.random() < 0.8 else -1)
+        sz = crng.uniform(0.01, 0.03)
+        p = to_world @ Vector((x, y, GROUND - LOG_C.z + sz * 0.3))
+        crumbs.append(blob(f"crumb{i}", rot[log], p, (sz * crng.uniform(1, 1.8), sz, sz * crng.uniform(0.5, 0.9)),
+                           (crng.uniform(0, 3), crng.uniform(0, 3), crng.uniform(0, 6)), subdiv=2, rough=0.45, seed=700 + i))
+    ALL += crumbs
+    set_objs += crumbs
+
+    def collapse_to(c):
+        for o in logs:
+            for v, co in zip(o.data.vertices, rest[o]):
+                v.co = slump(co, c)
+            o.data.update()
+        for o in moss:
+            loc, root = roots[o]
+            o.location = loc + (to_world @ slump(root, c) - to_world @ root)
+        bpy.context.view_layer.update()
+
+    # the box covers the log and its moss as they were and the heap after
+    old = world_bounds(logs + moss)
+    collapse_to(1.0)
+    new = world_bounds(logs + moss + crumbs)
+    a, b, c, d = min(old[0], new[0]), max(old[1], new[1]), min(old[2], new[2]), max(old[3], new[3])
+    resx, resy = scene.render.resolution_x, scene.render.resolution_y
+    px = (FRAME["x1"] - FRAME["x0"]) / resx
+    i0, i1 = math.floor((a - FRAME["x0"]) / px) - 6, math.ceil((b - FRAME["x0"]) / px) + 6
+    j0, j1 = math.floor((c - FRAME["z0"]) / px) - 6, math.ceil((d - FRAME["z0"]) / px) + 6
+    scene.render.use_border, scene.render.use_crop_to_border = True, True
+    scene.render.border_min_x, scene.render.border_max_x = i0 / resx, i1 / resx
+    scene.render.border_min_y, scene.render.border_max_y = j0 / resy, j1 / resy
+    flat = {k: bpy.data.materials.new("cid-" + k) for k in ("soil", "wood", "")}
+    for k, m in flat.items():
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.remove(nt.nodes["Principled BSDF"])
+        em = nt.nodes.new("ShaderNodeEmission")
+        em.inputs["Color"].default_value = {"soil": (1, 0, 0, 1), "wood": (0, 1, 0, 1), "": (0, 0, 0, 1)}[k]
+        nt.links.new(em.outputs[0], nt.nodes["Material Output"].inputs["Surface"])
+    bg = world.node_tree.nodes["Background"].inputs["Strength"]
+    for k, amt in enumerate(COLLAPSE_STAGES, 1):
+        collapse_to(amt)
+        def show_stage(visible, holdout=()):
+            show(visible, holdout)
+            for o in crumbs[int(len(crumbs) * amt):]:  # fewer crumbs early on
+                o.hide_render, o.is_holdout = True, False
+        show_stage(set_objs + front_objs)
+        render(f"collapse{k}")
+        show_stage(front_objs, holdout=set_objs)
+        render(f"collapse{k}-front")
+        # flat id colors, as in the id pass
+        show_stage(set_objs + front_objs)
+        saved = {o: list(o.data.materials) for o in ALL if o.data and hasattr(o.data, "materials")}
+        for o in saved:
+            o.data.materials.clear()
+            o.data.materials.append(flat[o.get("sub", "")])
+        keep = (scene.cycles.samples, scene.cycles.use_denoising, scene.cycles.filter_width, scene.render.dither_intensity,
+                scene.view_settings.view_transform, scene.render.film_transparent, bg.default_value)
+        scene.cycles.samples, scene.cycles.use_denoising, scene.cycles.filter_width = 1, False, 0.01
+        scene.render.dither_intensity, scene.view_settings.view_transform = 0, "Standard"
+        scene.render.film_transparent, bg.default_value = False, 0
+        render(f"collapse{k}-id", "PNG")
+        (scene.cycles.samples, scene.cycles.use_denoising, scene.cycles.filter_width, scene.render.dither_intensity,
+         scene.view_settings.view_transform, scene.render.film_transparent, bg.default_value) = keep
+        for o, ms in saved.items():
+            o.data.materials.clear()
+            for m in ms:
+                o.data.materials.append(m)
+    scene.render.use_border = False
+    with open(os.path.join(OUT, "collapse.json"), "w") as f:
+        json.dump({"n": len(COLLAPSE_STAGES), "box": [FRAME["x0"] + i0 * px, FRAME["z0"] + j0 * px,
+                                                       FRAME["x0"] + i1 * px, FRAME["z0"] + j1 * px]}, f)
 
 # ---------- the room ----------
 # The jar on a painted windowsill, the window and wall behind it out of focus,

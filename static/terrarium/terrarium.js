@@ -40,7 +40,10 @@ const LINKS=[
 const TT=['#eee0c2','#8a6b4e','#4b3a2e','#a48c6c','#5d6e7a','#33271e'];
 
 /* ---------- state ---------- */
-let W,H,DPR,L,back,backBase,front,glass,myc,mctx,mglow,gctx,rotShown=-1;
+let W,H,DPR,L,back,backBase,front,frontBase,glass,myc,mctx,mglow,gctx,rotShown=-1;
+// how far the rotten log has slumped (0..1), and when it started to
+let collapseC=0,collapseAt=null,stageShown=0;
+const COLLAPSE_S=120;
 // The pre-rendered set (blender/terrarium.py), or null to draw it procedurally.
 let SET=null;
 let spores=[],mush=[],brackets=[],flies=[],sown=0,MAXM,T=0;
@@ -73,16 +76,23 @@ function layout(){
 function setGeometry(){
   const f=SET.frame,u=L.jw/2;
   L.img=[L.cx+f.x0*u,L.yb-f.z1*u,(f.x1-f.x0)*u,(f.z1-f.z0)*u];
+  // one shape per collapse stage too, with the stage's id crop over its box
+  L.geo=[readId()];if(SET.collapse)for(const s of SET.collapse.stages)L.geo.push(readId(s));
+  const g=L.geo[0];L.id=g.id;L.soilTop=g.soilTop.slice();L.woodTop=g.woodTop.slice();stageShown=0;
+}
+function readId(stage){
   const c=document.createElement('canvas');c.width=W;c.height=H;
   const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=false;
-  x.drawImage(SET.id,...L.img);
+  x.drawImage(SET.id,...L.img);if(stage)x.drawImage(stage.id,...boxRect(SET.collapse.box));
   const px=x.getImageData(0,0,W,H).data,id=new Uint8Array(W*H);
   for(let i=0;i<W*H;i++)id[i]=px[i*4]>128?1:px[i*4+1]>128?2:0;
   const soilTop=new Float32Array(W).fill(Infinity),woodTop=new Float32Array(W).fill(Infinity);
   for(let cx=0;cx<W;cx++)for(let cy=0;cy<H;cy++){const k=id[cy*W+cx];
     if(k===1&&soilTop[cx]===Infinity)soilTop[cx]=cy;if(k===2&&woodTop[cx]===Infinity)woodTop[cx]=cy}
-  L.id=id;L.soilTop=soilTop;L.woodTop=woodTop;
+  return{id,soilTop,woodTop};
 }
+// a box in the set's units [x0, z0, x1, z1] on the page
+const boxRect=b=>{const u=L.jw/2;return[L.cx+b[0]*u,L.yb-b[3]*u,(b[2]-b[0])*u,(b[3]-b[1])*u]};
 const idAt=(x,y)=>{x|=0;y|=0;return x<0||y<0||x>=W||y>=H?0:L.id[y*W+x]};
 const col=(a,x)=>{x|=0;return x<0||x>=W?Infinity:a[x]};
 function surface(x){
@@ -116,12 +126,40 @@ function drawRoom(){
   if(nightA>0){ctx.globalAlpha=nightA;ctx.drawImage(nt,...r);ctx.globalAlpha=1}
 }
 function composeRot(r){
-  if(!SET||!SET.rot||!backBase||Math.abs(r-rotShown)<.01)return;rotShown=r;
-  const[c,x]=mk(),{box,imgs}=SET.rot,u=L.jw/2,f=r*imgs.length;
+  const key=r+collapseC*10;
+  if(!SET||!SET.rot||!backBase||Math.abs(key-rotShown)<.01)return;rotShown=key;
+  const[c,x]=mk(),{box,imgs}=SET.rot,f=r*imgs.length;
   x.setTransform(1,0,0,1,0,0);x.drawImage(backBase,0,0);x.setTransform(DPR,0,0,DPR,0,0);
-  for(let k=0;k<imgs.length&&f>k;k++){x.globalAlpha=clamp(f-k);
-    x.drawImage(imgs[k],L.cx+box[0]*u,L.yb-box[3]*u,(box[2]-box[0])*u,(box[3]-box[1])*u)}
-  back=c;
+  for(let k=0;k<imgs.length&&f>k;k++){x.globalAlpha=clamp(f-k);x.drawImage(imgs[k],...boxRect(box))}
+  x.globalAlpha=1;back=c;front=frontBase;
+  const C=SET.collapse;if(!C||collapseC<=0)return;
+  // collapse stages replace their whole box, back and front
+  // on whole device pixels, or the box's antialiased edge shows as a line
+  const sn=v=>Math.round(v*DPR)/DPR,[bx,by,bw,bh]=boxRect(C.box),fb=[sn(bx),sn(by),sn(bx+bw)-sn(bx),sn(by+bh)-sn(by)];
+  const[fc,fx]=mk(),fk=collapseC*C.stages.length;
+  fx.setTransform(1,0,0,1,0,0);fx.drawImage(frontBase,0,0);fx.setTransform(DPR,0,0,DPR,0,0);
+  C.stages.forEach((s,k)=>{const a=clamp(fk-k);if(a>0){swapIn(x,s.back,fb,a);swapIn(fx,s.front,fb,a)}});
+  front=fc;
+}
+// crossfades r of x toward img: what's there goes to 1-a, then img adds a
+function swapIn(x,img,r,a){
+  x.save();x.globalAlpha=a;x.globalCompositeOperation='destination-out';x.fillStyle='#000';x.fillRect(...r);
+  x.globalCompositeOperation='lighter';x.drawImage(img,...r);x.restore()}
+// The rotten log slumps once the wood is gone: the log's outline moves
+// between the stages' shapes, the sim loses the wood that isn't there any
+// more, and the hyphae drawn in it go too.
+function applyCollapse(){
+  const C=SET&&SET.collapse;if(!C||!L.geo||L.geo.length<=C.stages.length)return;
+  const f=collapseC*C.stages.length,i=Math.min(Math.floor(f),C.stages.length-1),t=f-i,a=L.geo[i],b=L.geo[i+1];
+  const mix=(p,q)=>p===Infinity||q===Infinity?(t<.5?p:q):p+(q-p)*t;
+  for(let x=0;x<W;x++){L.woodTop[x]=mix(a.woodTop[x],b.woodTop[x]);L.soilTop[x]=mix(a.soilTop[x],b.soilTop[x])}
+  const k=Math.round(f);if(k===stageShown)return;
+  const old=L.id;L.id=L.geo[k].id;stageShown=k;
+  if(myco)myco.reshape(buildMask().m);
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d'),im=x.createImageData(W,H);
+  for(let j=0;j<W*H;j++)if(old[j]&&!L.id[j])im.data[j*4+3]=255;
+  x.putImageData(im,0,0);
+  for(const g of[mctx,gctx]){g.globalCompositeOperation='destination-out';g.drawImage(c,0,0,W,H);g.globalCompositeOperation='source-over'}
 }
 function drawBack(){
   const[c,x]=mk();back=c;
@@ -204,7 +242,7 @@ function drawSoil(x){
   x.restore();
 }
 function drawFront(){
-  const[c,x]=mk();front=c;if(SET){x.drawImage(SET.front,...L.img);return}
+  const[c,x]=mk();front=frontBase=c;if(SET){x.drawImage(SET.front,...L.img);return}
   x.save();jarPath(x);x.clip();
   for(let i=0;i<34;i++){const xx=rnd(L.ax-L.r*.6,L.bx-4),yy=rnd(L.ly-L.r*.9,L.ground-4);if(!inLog(xx,yy))continue;
     x.fillStyle=`rgba(${rnd(150,185)|0},${rnd(180,205)|0},${rnd(148,170)|0},${rnd(.3,.65)})`;x.beginPath();x.arc(xx,yy,rnd(1.5,5)*L.sm,0,TAU);x.fill()}
@@ -315,7 +353,7 @@ function spawnBracket(x,y){
   if(brackets.length>=5)return;
   for(const b of brackets)if(Math.hypot(b.x-x,b.y-y)<32*L.sm)return;
   for(const m of mush)if(Math.abs(m.x-x)<14&&Math.abs(m.y-y)<20)return;
-  const b={x,y,R:rnd(13,20)*L.sm,n:R()<.5?2:3,t:0,dur:rnd(8,14),dx:rnd(.4,.7)*(R()<.5?-1:1)};
+  const b={x,y,y0:y,top0:logTop(x),R:rnd(13,20)*L.sm,n:R()<.5?2:3,t:0,dur:rnd(8,14),dx:rnd(.4,.7)*(R()<.5?-1:1)};
   // shelves hang down and step sideways; keep the whole cluster on the log
   const ex=b.x+(b.n-1)*b.dx*b.R,ey=b.y+(b.n-1)*b.R*.45+b.R*.6;
   if(!inLog(b.x-b.R,b.y)||!inLog(b.x+b.R,b.y)||!inLog(ex,ey))return;
@@ -462,7 +500,7 @@ function init(){
   mctx.strokeStyle='rgba(236,230,212,.17)';mctx.lineWidth=.7;
   gctx.strokeStyle='rgba(140,255,170,.32)';gctx.lineWidth=1.2;
   spores=[];mush=[];brackets=[];MAXM=W<600?9:15;makeFlies();
-  initMyco();
+  initMyco();applyCollapse();
   LINKS.forEach((d,i)=>{const x=L.x0+L.jw*d.f;
     mush.push(makeMush({sprite:d.key,shape:d.shape,tall:d.tall,flat:d.flat,pal:d.pal,glow:d.glow,spore:d.spore,bulb:d.bulb,ring:d.ring,umbo:d.umbo,scales:d.scales,warts:d.warts,
       x,y:surfaceTop(x),link:d.key,H:clamp(L.jh*d.Hf,38,150),R:clamp(L.jw*d.Rf,10,46),sw:clamp(d.sw*L.sm,1.6,7),
@@ -482,6 +520,9 @@ function frame(now){
     if(g>=1&&m.wilt===0&&!still){m.nextPuff-=dt;if(m.nextPuff<=0){m.nextPuff=rnd(4,10);puff(m,(3+R()*4)|0)}}
     if(!m.link&&g>=1){m.age+=dt;if(m.age>m.life){m.wilt+=dt/5;if(m.wilt>=1){mush.splice(i,1)}}}}
   for(const b of brackets)b.t+=dt;
+  // things on the log ride it down as it slumps
+  if(collapseC>0){for(const m of mush)m.y=surfaceTop(m.x);
+    for(const b of brackets){const t=logTop(b.x),g=L.ground;if(t<g&&b.top0<g)b.y=Math.min(g-(g-b.y0)*(g-t)/(g-b.top0),g-((b.n-1)*.45+.6)*b.R)}}
   updateSpores(k,dt);updateFlies(k);
 
   ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
@@ -504,7 +545,9 @@ function frame(now){
   statT+=dt;if(statT>.5){statT=0;const fb=mush.filter(m=>m.G&&m.G.g>.3).length+brackets.length;
     const st=myco&&myco.stats();
     // most of the wood goes in the first few minutes; front-load the look of it
-    if(st)composeRot(Math.pow(clamp((1-st.wood)/.9),.7));
+    if(st&&collapseAt===null&&st.wood<.1)collapseAt=T;
+    if(collapseAt!==null){collapseC=clamp((T-collapseAt)/COLLAPSE_S);applyCollapse()}
+    if(st)composeRot(collapseC>0?1:Math.pow(clamp((1-st.wood)/.9),.7));
     statsEl.textContent=st?(W<520?`${Math.round(st.length).toLocaleString()} mm hyphae · ${st.tips} tips · ${fb} fruiting`:`${Math.round(st.length).toLocaleString()} mm of hyphae · ${st.tips} tips · ${fb} fruiting bodies · ${sown} spores sown`):mycoState==='failed'?'the mycelium failed to load':'germinating…'}
   requestAnimationFrame(frame);
 }
@@ -579,6 +622,11 @@ async function loadSet(){
   // the log starts fresh, so its rot stages can arrive later
   json(dir+'rot.json').then(async r=>{SET.rot={box:r.box,imgs:await Promise.all(Array.from({length:r.n},(_,k)=>img(`${dir}rot${k+1}.webp`)))}})
     .catch(e=>console.warn('rot stages',e));
+  json(dir+'collapse.json').then(async c=>{
+    const stages=await Promise.all(Array.from({length:c.n},async(_,k)=>{const n=`${dir}collapse${k+1}`;
+      const[back,front,id]=await Promise.all([img(n+'.webp'),img(n+'-front.webp'),img(n+'-id.png')]);return{back,front,id}}));
+    SET.collapse={box:c.box,stages};if(L&&L.geo)for(const s of stages)L.geo.push(readId(s))})
+    .catch(e=>console.warn('collapse stages',e));
 }
 loadMyco();
 // Give the rendered set a moment to load; draw the procedural jar if it can't.

@@ -69,6 +69,37 @@ func TestWoodGetsEaten(t *testing.T) {
 	}
 }
 
+func TestReshapeEmptiesCells(t *testing.T) {
+	s := newTestSim(3)
+	for i := 0; i < 600; i++ {
+		s.Step(1)
+	}
+	// the wood block crumbles away to nothing
+	m := soilBox(100, 60)
+	for i, k := range m {
+		if Substrate(k) == Wood {
+			m[i] = byte(Empty)
+		}
+	}
+	s.Reshape(m)
+	if got := s.WoodLeft(); got != 0 {
+		t.Fatalf("WoodLeft after the wood went = %v, want 0", got)
+	}
+	for _, tip := range s.tips {
+		if !s.inSub(tip.X, tip.Y) {
+			t.Fatalf("tip left outside substrate at (%.1f, %.1f)", tip.X, tip.Y)
+		}
+	}
+	for i := 0; i < 600; i++ {
+		s.Step(1)
+		for j := 0; j+4 < len(s.Segs); j += 5 {
+			if x, y := s.Segs[j+2], s.Segs[j+3]; !s.inSub(x, y) {
+				t.Fatalf("segment grew into the old wood at (%.1f, %.1f)", x, y)
+			}
+		}
+	}
+}
+
 func TestSowStartsUnderSurface(t *testing.T) {
 	s := New(100, 60, 2, soilBox(100, 60), 3, DefaultParams())
 	s.Sow(20, 3)

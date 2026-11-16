@@ -160,15 +160,7 @@ func New(w, h int, cell float32, mask []byte, seed int64, p Params) *Sim {
 	}
 	s.wood0 = s.woodFood()
 	s.surf = make([]int, w)
-	for x := 0; x < w; x++ {
-		s.surf[x] = -1
-		for y := 0; y < h; y++ {
-			if s.sub[y*w+x] != Empty {
-				s.surf[x] = y
-				break
-			}
-		}
-	}
+	s.findSurface()
 	s.trail = make([]int32, 4096)
 	cells := 0
 	for _, k := range s.sub {
@@ -186,6 +178,48 @@ func New(w, h int, cell float32, mask []byte, seed int64, p Params) *Sim {
 		s.maxTips = 2 * p.MinTips
 	}
 	return s
+}
+
+func (s *Sim) findSurface() {
+	for x := 0; x < s.W; x++ {
+		s.surf[x] = -1
+		for y := 0; y < s.H; y++ {
+			if s.sub[y*s.W+x] != Empty {
+				s.surf[x] = y
+				break
+			}
+		}
+	}
+}
+
+// Reshape changes the substrate to mask (same layout as New's) where it
+// differs, as when the rotten log collapses. Cells that empty lose their
+// food, hyphae and any tips in them; cells that change kind keep at most the
+// new kind's food.
+func (s *Sim) Reshape(mask []byte) {
+	for i := 0; i < len(s.sub) && i < len(mask); i++ {
+		k := Substrate(mask[i])
+		if k > Litter {
+			k = Soil
+		}
+		if k == s.sub[i] {
+			continue
+		}
+		s.sub[i] = k
+		if k == Empty {
+			s.food[i], s.bio[i] = 0, 0
+		} else if s.food[i] > foodCap[k] {
+			s.food[i] = foodCap[k]
+		}
+	}
+	tips := s.tips[:0]
+	for _, t := range s.tips {
+		if s.inSub(t.X, t.Y) {
+			tips = append(tips, t)
+		}
+	}
+	s.tips = tips
+	s.findSurface()
 }
 
 // WoodLeft returns the fraction of the wood's starting food not yet eaten:

@@ -9,6 +9,7 @@
 //	myco.step(frames, dstUint8Array) -> {n, fruits: [x, y, kind, bracket, ...]}
 //	myco.sow(x, n)
 //	myco.stats() -> {length, tips, wood}
+//	myco.reshape(maskUint8Array)
 //
 // Segments are written to dst (a byte view of a Float32Array) as
 // x0, y0, x1, y1, width.
@@ -31,6 +32,7 @@ func main() {
 	api.Set("step", js.FuncOf(step))
 	api.Set("sow", js.FuncOf(sow))
 	api.Set("stats", js.FuncOf(stats))
+	api.Set("reshape", js.FuncOf(reshape))
 	js.Global().Set("myco", api)
 	js.Global().Call("dispatchEvent", js.Global().Get("Event").New("myco-ready"))
 	select {}
@@ -79,6 +81,15 @@ func step(_ js.Value, a []js.Value) any {
 		fruits = append(fruits, float64(f.X), float64(f.Y), int(f.Kind), b)
 	}
 	return map[string]any{"n": copySegs(a[1]), "fruits": fruits}
+}
+
+func reshape(_ js.Value, a []js.Value) any {
+	if sim != nil {
+		mask := make([]byte, a[0].Get("length").Int())
+		js.CopyBytesToGo(mask, a[0])
+		sim.Reshape(mask)
+	}
+	return nil
 }
 
 func stats(js.Value, []js.Value) any {

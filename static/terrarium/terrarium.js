@@ -13,7 +13,7 @@ function shade(hex,a){const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255
 
 /* ---------- content ---------- */
 const CARDS={
-  about:{k:'Gymnopilus · about',t:"Hi, I'm Ben.",p:"Aka @mossity aka @benmoss on various parts of the web."},
+  about:{k:'Gymnopilus · about',t:"Hi, I'm Ben.",label:'About Ben',p:"Aka @mossity aka @benmoss on various parts of the web."},
   github:{k:'Macrolepiota · code',t:'GitHub',p:'Code, experiments, and half-finished things.',href:'https://github.com/benmoss',cta:'github.com/benmoss →'},
   bluesky:{k:'Entoloma hochstetteri · social',t:'Bluesky',href:'https://bsky.app/profile/mossity.com',cta:'@mossity.com →'},
   mycomatch:{k:'Amanita muscaria · mycomatch',t:'Mycomatch',p:"A trainer for identifying mushrooms from real iNaturalist observations. Still a work in progress.",href:'https://mycomatch.mossity.com/',cta:'mycomatch.mossity.com →'},
@@ -44,6 +44,10 @@ let W,H,DPR,L,back,backBase,front,glass,myc,mctx,mglow,gctx,rotShown=-1;
 // The pre-rendered set (blender/terrarium.py), or null to draw it procedurally.
 let SET=null;
 let spores=[],mush=[],brackets=[],flies=[],sown=0,MAXM,T=0;
+// prefers-reduced-motion: no swaying, flickering or ambient spore puffs, and
+// the link mushrooms start fully grown
+const RM=matchMedia('(prefers-reduced-motion: reduce)');let still=RM.matches;
+RM.addEventListener('change',e=>{still=e.matches});
 let night=(()=>{const h=new Date().getHours();return h<7||h>=18})(),nightA=night?1:0;
 
 function mk(){const c=document.createElement('canvas');c.width=W*DPR;c.height=H*DPR;const x=c.getContext('2d');x.setTransform(DPR,0,0,DPR,0,0);return[c,x]}
@@ -321,7 +325,7 @@ function geom(m){
   const g=clamp((m.t-m.delay)/m.dur);
   const eh=easeOut(clamp((g-.06)/.75)),cg=easeBack(clamp((g-.18)/.82));
   const h=m.H*eh,Rr=m.R*(.3+.7*cg);
-  const sway=Math.sin(T*.55+m.phase)*.025+Math.sin(T*1.3+m.phase*2)*.008;
+  const sway=still?0:Math.sin(T*.55+m.phase)*.025+Math.sin(T*1.3+m.phase*2)*.008;
   const th=m.lean+sway+m.wilt*1.1*m.wdir;
   const capH=m.shape==='conic'?Rr*m.tall:Rr*(m.flat||.6);
   return{g,h,R:Rr,cg,th,capH,tx:m.x+Math.sin(th)*h,ty:m.y-Math.cos(th)*h};
@@ -381,7 +385,7 @@ function drawMushSprite(m,G,S){
 }
 function drawGlow(m){
   const G=m.G;if(!G||G.g<.3)return;
-  const a=nightA*(1-m.wilt)*clamp((G.g-.3)/.5)*(.75+.25*Math.sin(T*1.7+m.phase));
+  const a=nightA*(1-m.wilt)*clamp((G.g-.3)/.5)*(still?.85:.75+.25*Math.sin(T*1.7+m.phase));
   const cx=G.tx+Math.sin(G.th)*G.capH*.45,cy=G.ty-Math.cos(G.th)*G.capH*.45,rr=G.R*3.2+6;
   const g=ctx.createRadialGradient(cx,cy,0,cx,cy,rr);
   g.addColorStop(0,`rgba(170,255,150,${.55*a})`);g.addColorStop(.25,`rgba(110,235,120,${.25*a})`);g.addColorStop(1,'rgba(60,200,90,0)');
@@ -423,7 +427,7 @@ function updateFlies(k){for(const f of flies){
   const lo=domeY(f.x)+24,hi=surfaceTop(f.x)-30;
   if(f.x<L.x0+20){f.x=L.x0+20;f.vx=Math.abs(f.vx)}if(f.x>L.x1-20){f.x=L.x1-20;f.vx=-Math.abs(f.vx)}
   if(f.y<lo){f.y=lo;f.vy=Math.abs(f.vy)}if(f.y>hi){f.y=hi;f.vy=-Math.abs(f.vy)}}}
-function drawFlies(){if(nightA<.05)return;
+function drawFlies(){if(nightA<.05||still)return;
   for(const f of flies){const b=Math.pow(Math.max(0,Math.sin(T*f.f+f.ph)),10)*nightA;if(b<.01)continue;
     const g=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,14);
     g.addColorStop(0,`rgba(235,255,150,${.9*b})`);g.addColorStop(.2,`rgba(190,240,110,${.35*b})`);g.addColorStop(1,'rgba(150,220,90,0)');
@@ -463,6 +467,7 @@ function init(){
     mush.push(makeMush({sprite:d.key,shape:d.shape,tall:d.tall,flat:d.flat,pal:d.pal,glow:d.glow,spore:d.spore,bulb:d.bulb,ring:d.ring,umbo:d.umbo,scales:d.scales,warts:d.warts,
       x,y:surfaceTop(x),link:d.key,H:clamp(L.jh*d.Hf,38,150),R:clamp(L.jw*d.Rf,10,46),sw:clamp(d.sw*L.sm,1.6,7),
       curve:rnd(-.06,.06),lean:rnd(-.05,.05),delay:.5+i*.8,dur:SET?5.5+R()*1.5:3.4+R()}))});
+  if(still)for(const m of mush)m.t=m.delay+m.dur;
 }
 
 /* ---------- loop ---------- */
@@ -474,7 +479,7 @@ function frame(now){
   if(myco){const r=myco.step(k,segBytes);if(r){drawSegs(r.n);onFruit(r.fruits)}
     fadeT+=dt;if(fadeT>=FADE_EVERY){fadeT=0;fadeMyco()}}
   for(let i=mush.length-1;i>=0;i--){const m=mush[i];m.t+=dt;const g=m.G?m.G.g:0;
-    if(g>=1&&m.wilt===0){m.nextPuff-=dt;if(m.nextPuff<=0){m.nextPuff=rnd(4,10);puff(m,(3+R()*4)|0)}}
+    if(g>=1&&m.wilt===0&&!still){m.nextPuff-=dt;if(m.nextPuff<=0){m.nextPuff=rnd(4,10);puff(m,(3+R()*4)|0)}}
     if(!m.link&&g>=1){m.age+=dt;if(m.age>m.life){m.wilt+=dt/5;if(m.wilt>=1){mush.splice(i,1)}}}}
   for(const b of brackets)b.t+=dt;
   updateSpores(k,dt);updateFlies(k);
@@ -487,7 +492,7 @@ function frame(now){
   if(nightA>.01){
     ctx.fillStyle=`rgba(3,6,14,${.62*nightA})`;ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation='lighter';
-    ctx.globalAlpha=nightA*(.32+.1*Math.sin(T*.7));ctx.drawImage(mglow,0,0,W,H);ctx.globalAlpha=1;
+    ctx.globalAlpha=nightA*(still?.32:.32+.1*Math.sin(T*.7));ctx.drawImage(mglow,0,0,W,H);ctx.globalAlpha=1;
     for(const m of mush)if(m.glow)drawGlow(m);
     drawFlies();
     ctx.globalCompositeOperation='source-over'}
@@ -495,7 +500,7 @@ function frame(now){
   // rendered glass is reflections only, which add light rather than cover
   if(SET)ctx.globalCompositeOperation='screen';
   ctx.drawImage(glass,0,0,W,H);ctx.globalCompositeOperation='source-over';
-  drawLabels();
+  drawLabels();placeKeys();
   statT+=dt;if(statT>.5){statT=0;const fb=mush.filter(m=>m.G&&m.G.g>.3).length+brackets.length;
     const st=myco&&myco.stats();
     // most of the wood goes in the first few minutes; front-load the look of it
@@ -504,13 +509,36 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 
+/* ---------- keyboard ---------- */
+// The canvas is invisible to keyboards and screen readers, so each link
+// mushroom gets a real button that follows its cap. Pointers still go through
+// the canvas, which hit-tests wild mushrooms and sows spores too.
+const keys=document.getElementById('keys'),keyBtn={};
+for(const d of LINKS){const b=document.createElement('button');b.type='button';
+  b.setAttribute('aria-label',CARDS[d.key].label||CARDS[d.key].t);b.style.visibility='hidden';
+  b.onclick=()=>{const m=mush.find(m=>m.link===d.key);if(m&&!still)puff(m,34);opener=b;openCard(d.key)};
+  keys.appendChild(b);keyBtn[d.key]=b}
+// the buttons and cards carry the links now; the fallback list would repeat them
+document.querySelector('nav.sr').hidden=true;
+function placeKeys(){
+  for(const m of mush){if(!m.link)continue;const b=keyBtn[m.link],G=m.G,on=G&&G.g>=.5;
+    b.style.visibility=on?'visible':'hidden';if(!on)continue;
+    const r=Math.round(Math.max(16,G.R+6)),cx=G.tx+Math.sin(G.th)*G.capH*.4,cy=G.ty-Math.cos(G.th)*G.capH*.4;
+    const t=`translate(${Math.round(cx-r)}px,${Math.round(cy-r)}px)`;
+    if(b.style.transform!==t){b.style.transform=t;b.style.width=b.style.height=2*r+'px'}}
+}
+
 /* ---------- interaction ---------- */
 const card=document.getElementById('card');
 function openCard(key){const d=CARDS[key];
   document.getElementById('cardK').textContent=d.k;document.getElementById('cardT').textContent=d.t;const cp=document.getElementById('cardP');cp.textContent=d.p||'';cp.style.display=d.p?'':'none';
   const a=document.getElementById('cardA');if(d.href){a.href=d.href;a.textContent=d.cta;a.style.display=''}else a.style.display='none';
-  card.classList.add('open')}
-const closeCard=()=>card.classList.remove('open');
+  card.classList.add('open');
+  // keyboard users land in the card; pointer users keep their place
+  if(opener)(d.href?a:document.getElementById('cardX')).focus({preventScroll:true})}
+let opener=null;
+const closeCard=()=>{if(!card.classList.contains('open'))return;card.classList.remove('open');
+  if(opener){opener.focus();opener=null}};
 document.getElementById('cardX').onclick=closeCard;
 addEventListener('keydown',e=>{if(e.key==='Escape')closeCard()});
 function hit(x,y){let best=null,bd=1e9;
@@ -522,7 +550,7 @@ cv.addEventListener('pointerdown',e=>{
   if(!L)return;
   const x=e.clientX,y=e.clientY;
   if(card.classList.contains('open')){closeCard();return}
-  const m=hit(x,y);
+  opener=null;const m=hit(x,y);
   if(m){puff(m,m.link?34:16);if(m.link)openCard(m.link);return}
   if(inJar(x,y,8)){sown+=16;for(let i=0;i<16;i++)addSpore(x+rnd(-4,4),y+rnd(-4,4),rnd(-.8,.8),rnd(-.6,.5),'235,225,200')}
 });

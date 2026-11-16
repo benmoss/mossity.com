@@ -130,6 +130,7 @@ type Sim struct {
 
 	marks     []fruitMark
 	regrowAcc float32
+	wood0     float32
 	noFruit   bool
 
 	// Output of the last Step or Warm: segments as x0,y0,x1,y1,width.
@@ -157,6 +158,7 @@ func New(w, h int, cell float32, mask []byte, seed int64, p Params) *Sim {
 			s.food[i] = foodCap[k] * (0.6 + 0.4*s.rng.Float32())
 		}
 	}
+	s.wood0 = s.woodFood()
 	s.surf = make([]int, w)
 	for x := 0; x < w; x++ {
 		s.surf[x] = -1
@@ -184,6 +186,24 @@ func New(w, h int, cell float32, mask []byte, seed int64, p Params) *Sim {
 		s.maxTips = 2 * p.MinTips
 	}
 	return s
+}
+
+// WoodLeft returns the fraction of the wood's starting food not yet eaten:
+// 1 for a fresh log, falling toward 0 as it rots. It's 0 with no wood.
+func (s *Sim) WoodLeft() float32 {
+	if s.wood0 == 0 {
+		return 0
+	}
+	return s.woodFood() / s.wood0
+}
+
+func (s *Sim) woodFood() (sum float32) {
+	for i, k := range s.sub {
+		if k == Wood {
+			sum += s.food[i]
+		}
+	}
+	return
 }
 
 // Tips returns the number of growing tips.

@@ -58,20 +58,14 @@ func TestDeterministic(t *testing.T) {
 
 func TestWoodGetsEaten(t *testing.T) {
 	s := newTestSim(7)
-	woodFood := func() (sum float32) {
-		for i, k := range s.sub {
-			if k == Wood {
-				sum += s.food[i]
-			}
-		}
-		return
+	if got := s.WoodLeft(); got != 1 {
+		t.Fatalf("fresh log WoodLeft = %v, want 1", got)
 	}
-	before := woodFood()
 	for i := 0; i < 60*60*5; i++ {
 		s.Step(1)
 	}
-	if after := woodFood(); after > before*0.5 {
-		t.Fatalf("wood barely decayed: %.1f -> %.1f", before, after)
+	if got := s.WoodLeft(); got > 0.5 {
+		t.Fatalf("wood barely decayed: %.2f left", got)
 	}
 }
 

@@ -20,13 +20,13 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font-family:'JetBrains Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-header{position:fixed;top:0;left:0;right:0;padding:20px 22px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none;z-index:2}
+header{color:var(--ink);position:fixed;top:0;left:0;right:0;padding:20px 22px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none;z-index:2;text-shadow:0 1px 10px rgba(0,0,0,.5)}
 h1{font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:clamp(30px,5vw,46px);line-height:1;letter-spacing:-.015em;font-variation-settings:'opsz' 144}
 h1 em{font-style:italic;font-weight:300;color:var(--gold)}
 .sub{font-size:11px;color:var(--dim);margin-top:9px;letter-spacing:.03em;line-height:1.5}
 .btn{pointer-events:auto;background:rgba(239,230,210,.05);border:1px solid rgba(239,230,210,.18);color:var(--ink);font:inherit;font-size:11px;padding:7px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
 .btn:hover{background:rgba(239,230,210,.1)}
-footer{position:fixed;left:0;right:0;bottom:0;padding:12px 22px 14px;display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:var(--dim);pointer-events:none;z-index:2;letter-spacing:.03em}
+footer{position:fixed;left:0;right:0;bottom:0;padding:12px 22px 14px;display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:var(--dim);pointer-events:none;z-index:2;letter-spacing:.03em;text-shadow:0 1px 8px rgba(0,0,0,.6)}
 #card{position:fixed;z-index:5;left:50%;bottom:22px;transform:translate(-50%,16px);width:min(420px,calc(100% - 28px));background:rgba(18,22,17,.93);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(239,230,210,.15);border-radius:14px;padding:20px 22px 20px;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 #card.open{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 #card .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
@@ -35,6 +35,12 @@ footer{position:fixed;left:0;right:0;bottom:0;padding:12px 22px 14px;display:fle
 #card a.go{display:inline-block;margin-top:14px;color:var(--ink);font-size:12px;border-bottom:1px solid var(--gold);text-decoration:none;padding-bottom:2px}
 #card .x{position:absolute;top:8px;right:12px;background:none;border:0;color:var(--dim);font-size:22px;line-height:1;cursor:pointer;padding:6px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* daylight on the windowsill wall: dark ink instead of cream */
+header,footer{transition:color .4s ease}
+body.day header,body.day footer{--ink:#1c2119;--dim:rgba(28,33,25,.75);text-shadow:0 1px 10px rgba(255,255,255,.3)}
+body.day h1 em{color:#76612e}
+body.day .btn{background:rgba(28,33,25,.06);border-color:rgba(28,33,25,.28)}
+body.day .btn:hover{background:rgba(28,33,25,.12)}
 @media (max-width:520px){.hide-sm{display:none}}
 </style>
 </head>
@@ -59,6 +65,7 @@ footer{position:fixed;left:0;right:0;bottom:0;padding:12px 22px 14px;display:fle
   <p>Hi! I'm Ben, aka @mossity aka @benmoss on various parts of the web.</p>
   <a href="https://github.com/benmoss">GitHub</a>
   <a href="https://bsky.app/profile/mossity.com">Bluesky</a>
+  <a href="https://mycomatch.mossity.com/">Mycomatch, a mushroom identification trainer</a>
 </nav>
 <script src="/terrarium/wasm_exec.js"></script>
 <script src="/terrarium/terrarium.js"></script>

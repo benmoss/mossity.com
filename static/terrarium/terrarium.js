@@ -16,7 +16,8 @@ const CARDS={
   about:{k:'Gymnopilus · about',t:"Hi, I'm Ben.",p:"Aka @mossity aka @benmoss on various parts of the web. I build infrastructure in Brooklyn, mostly storage, and I like things that grow in the dark."},
   github:{k:'Macrolepiota · code',t:'GitHub',p:'Code, experiments, and half-finished things.',href:'https://github.com/benmoss',cta:'github.com/benmoss →'},
   bluesky:{k:'Entoloma hochstetteri · social',t:'Bluesky',p:'The blue one. Its spores print pink, which feels right for a social network.',href:'https://bsky.app/profile/mossity.com',cta:'@mossity.com →'},
-  colophon:{k:'Mycena · colophon',t:'How this jar works',p:'Hyphae wander through soil and rotting wood, branch, and fruit where they get dense enough. Turkey tail shelves show up on the log. At night the Mycena glow and the mycelium gives off a little foxfire. Tap anywhere in the jar to sow spores. None of this is accurate biology.'}
+  mycomatch:{k:'Amanita muscaria · mycomatch',t:'Mycomatch',p:"A trainer for identifying mushrooms from real iNaturalist observations. Still a work in progress.",href:'https://mycomatch.mossity.com/',cta:'mycomatch.mossity.com →'},
+  colophon:{k:'Mycena · colophon',t:'How this jar works',p:'Hyphae wander through soil and rotting wood, branch, and fruit where they get dense enough. Turkey tail shelves show up on the log, and as the mycelium eats it the bark sloughs off and the wood bleaches. At night the Mycena glow and the mycelium gives off a little foxfire. Tap anywhere in the jar to sow spores.'}
 };
 const SPECIES={
   mycena:{shape:'conic',tall:1.15,glow:true,spore:'245,240,225',H:[.05,.09],R:[5,8],sw:[1.1,1.6],curve:[-.25,.25],
@@ -31,13 +32,17 @@ const LINKS=[
     pal:{cap:'#c0622c',hi:'#eda56b',dark:'#6e3212',stipe:'#e2c79a',gill:'#d79a55'}},
   {key:'colophon',f:.53,shape:'conic',tall:1.2,glow:true,spore:'245,240,225',Hf:.1,Rf:.03,sw:1.9,
     pal:{cap:'#cfa24c',hi:'#f4dc95',dark:'#7e5a1c',stipe:'#e8d6ae',gill:'#efe2c4'}},
-  {key:'github',f:.8,shape:'dome',flat:.42,umbo:true,scales:true,ring:true,bulb:true,spore:'250,248,240',Hf:.2,Rf:.075,sw:3.6,
-    pal:{cap:'#e6dcc6',hi:'#fbf6ea',dark:'#9a8462',stipe:'#eee4d0',gill:'#f1eadb'}}
+  {key:'github',f:.76,shape:'dome',flat:.42,umbo:true,scales:true,ring:true,bulb:true,spore:'250,248,240',Hf:.2,Rf:.075,sw:3.6,
+    pal:{cap:'#e6dcc6',hi:'#fbf6ea',dark:'#9a8462',stipe:'#eee4d0',gill:'#f1eadb'}},
+  {key:'mycomatch',f:.92,shape:'dome',flat:.5,warts:true,scales:true,ring:true,bulb:true,spore:'250,248,240',Hf:.14,Rf:.05,sw:3,
+    pal:{cap:'#c8231a',hi:'#f0603c',dark:'#7a1008',stipe:'#efe9dc',gill:'#f4efe4'}}
 ];
 const TT=['#eee0c2','#8a6b4e','#4b3a2e','#a48c6c','#5d6e7a','#33271e'];
 
 /* ---------- state ---------- */
-let W,H,DPR,L,back,front,glass,myc,mctx,mglow,gctx;
+let W,H,DPR,L,back,backBase,front,glass,myc,mctx,mglow,gctx,rotShown=-1;
+// The pre-rendered set (blender/terrarium.py), or null to draw it procedurally.
+let SET=null;
 let spores=[],mush=[],brackets=[],flies=[],sown=0,MAXM,T=0;
 let night=(()=>{const h=new Date().getHours();return h<7||h>=18})(),nightA=night?1:0;
 
@@ -47,36 +52,77 @@ function mk(){const c=document.createElement('canvas');c.width=W*DPR;c.height=H*
 function layout(){
   DPR=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;
   cv.width=W*DPR;cv.height=H*DPR;
-  const top=Math.max(110,H*.14),bot=Math.max(54,H*.07),avail=H-top-bot,narrow=W<600;
+  const top=Math.max(110,H*.14),bot=Math.max(54,H*.07),avail=H-top-bot,narrow=W<600&&!SET;
   // Phones get a taller jar with more soil, since the soil is where things happen.
-  const jw=Math.min(W*.9,780),jh=Math.min(avail,jw*(narrow?1.5:1.05));
+  // The rendered set has fixed proportions, so it scales to fit instead.
+  const aspect=SET?SET.jar.h/2:narrow?1.5:1.05;
+  const jw=SET?Math.min(W*.9,780,avail/aspect):Math.min(W*.9,780),jh=Math.min(avail,jw*aspect);
   const cx=W/2,yb=top+(avail+jh)/2,ytop=yb-jh,domeH=Math.min(jw*.3,jh*.34);
-  const x0=cx-jw/2,x1=cx+jw/2,yw=ytop+domeH,ground=yb-jh*(narrow?.4:.34);
+  const x0=cx-jw/2,x1=cx+jw/2,yw=ytop+domeH,ground=yb-jh*(SET?SET.jar.ground/SET.jar.h:narrow?.4:.34);
   const r=clamp(jh*.075,24,46);
   L={cx,yb,ytop,domeH,x0,x1,yw,jw,jh,ground,r,ax:x0+jw*.2,bx:x0+jw*.6,ly:ground-r*.5,cr:18,gy:yb-jh*.055,s:jw/600};
   L.sm=Math.max(.8,L.s);
+  if(SET)setGeometry();
 }
-const surface=x=>L.ground+Math.sin(x*.021)*4+Math.sin(x*.057+1.3)*2.5;
-function logTop(x){const{ax,bx,ly,r}=L;
+// Lines the rendered layers up with the layout and reads the soil and wood
+// shapes out of the id layer, so the sim and the mushrooms follow the render.
+function setGeometry(){
+  const f=SET.frame,u=L.jw/2;
+  L.img=[L.cx+f.x0*u,L.yb-f.z1*u,(f.x1-f.x0)*u,(f.z1-f.z0)*u];
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=false;
+  x.drawImage(SET.id,...L.img);
+  const px=x.getImageData(0,0,W,H).data,id=new Uint8Array(W*H);
+  for(let i=0;i<W*H;i++)id[i]=px[i*4]>128?1:px[i*4+1]>128?2:0;
+  const soilTop=new Float32Array(W).fill(Infinity),woodTop=new Float32Array(W).fill(Infinity);
+  for(let cx=0;cx<W;cx++)for(let cy=0;cy<H;cy++){const k=id[cy*W+cx];
+    if(k===1&&soilTop[cx]===Infinity)soilTop[cx]=cy;if(k===2&&woodTop[cx]===Infinity)woodTop[cx]=cy}
+  L.id=id;L.soilTop=soilTop;L.woodTop=woodTop;
+}
+const idAt=(x,y)=>{x|=0;y|=0;return x<0||y<0||x>=W||y>=H?0:L.id[y*W+x]};
+const col=(a,x)=>{x|=0;return x<0||x>=W?Infinity:a[x]};
+function surface(x){
+  if(SET){const y=col(L.soilTop,x);return y===Infinity?L.ground:y}
+  return L.ground+Math.sin(x*.021)*4+Math.sin(x*.057+1.3)*2.5}
+function logTop(x){if(SET)return col(L.woodTop,x);const{ax,bx,ly,r}=L;
   if(x<ax-r)return Infinity;
   if(x<ax)return ly-Math.sqrt(Math.max(0,r*r-(ax-x)**2));
   if(x<=bx)return ly-r;
   const u=(x-bx)/(r*.4);if(u>=1)return Infinity;return ly-r*Math.sqrt(1-u*u)}
 const surfaceTop=x=>Math.min(surface(x),logTop(x));
-function inLog(x,y){const{ax,bx,ly,r}=L;
+function inLog(x,y){if(SET)return idAt(x,y)===2;const{ax,bx,ly,r}=L;
   if(x>bx){const u=(y-ly)/r;if(Math.abs(u)>=1)return false;return x<bx+r*.4*Math.sqrt(1-u*u)}
   const dx=Math.max(ax-x,0);return dx*dx+(y-ly)**2<r*r}
 function domeY(x){const u=(x-L.cx)/(L.jw/2);if(Math.abs(u)>=1)return L.yw;return L.yw-L.domeH*Math.sqrt(1-u*u)}
 const inJar=(x,y,m=5)=>x>L.x0+m&&x<L.x1-m&&y<L.yb-m&&y>domeY(x)+m;
-const inSub=(x,y)=>inJar(x,y,4)&&y<L.gy-2&&(y>surface(x)||inLog(x,y));
+const inSub=(x,y)=>SET?idAt(x,y)!==0:inJar(x,y,4)&&y<L.gy-2&&(y>surface(x)||inLog(x,y));
 function jarPath(c,i=0){const{x0,x1,yb,yw,cx,jw,domeH,cr}=L;const a=x0+i,b=x1-i,y=yb-i;
   c.beginPath();c.moveTo(a,yw);c.ellipse(cx,yw,jw/2-i,domeH-i,0,Math.PI,TAU);
   c.lineTo(b,y-cr);c.quadraticCurveTo(b,y,b-cr,y);c.lineTo(a+cr,y);c.quadraticCurveTo(a,y,a,y-cr);c.closePath()}
 function logPath(c){const{ax,bx,ly,r}=L;c.beginPath();c.moveTo(bx,ly-r);c.lineTo(ax,ly-r);c.arc(ax,ly,r,-Math.PI/2,Math.PI/2,true);c.lineTo(bx,ly+r);c.closePath()}
 
 /* ---------- static layers ---------- */
+// The log rotting (blender/terrarium.py): stages of the log alone, faded in
+// over the backdrop one after another as the mycelium eats the wood. Rot moves
+// slowly, so the backdrop is recomposed only when it has changed visibly.
+function drawRoom(){
+  const{box,day,night:nt}=SET.room,u=L.jw/2,r=[L.cx+box[0]*u,L.yb-box[3]*u,(box[2]-box[0])*u,(box[3]-box[1])*u];
+  ctx.fillStyle='#0b0d0b';ctx.fillRect(0,0,W,H);
+  if(nightA<1)ctx.drawImage(day,...r);
+  if(nightA>0){ctx.globalAlpha=nightA;ctx.drawImage(nt,...r);ctx.globalAlpha=1}
+}
+function composeRot(r){
+  if(!SET||!SET.rot||!backBase||Math.abs(r-rotShown)<.01)return;rotShown=r;
+  const[c,x]=mk(),{box,imgs}=SET.rot,u=L.jw/2,f=r*imgs.length;
+  x.setTransform(1,0,0,1,0,0);x.drawImage(backBase,0,0);x.setTransform(DPR,0,0,DPR,0,0);
+  for(let k=0;k<imgs.length&&f>k;k++){x.globalAlpha=clamp(f-k);
+    x.drawImage(imgs[k],L.cx+box[0]*u,L.yb-box[3]*u,(box[2]-box[0])*u,(box[3]-box[1])*u)}
+  back=c;
+}
 function drawBack(){
   const[c,x]=mk();back=c;
+  // the rendered room is drawn under this each frame, so day can fade to night
+  if(SET&&SET.room){x.drawImage(SET.back,...L.img);backBase=c;rotShown=-1;return}
   let g=x.createRadialGradient(L.cx,L.yb-L.jh*.45,10,L.cx,L.yb-L.jh*.45,Math.max(W,H)*.75);
   g.addColorStop(0,'#1e2b20');g.addColorStop(.55,'#0f1611');g.addColorStop(1,'#060907');
   x.fillStyle=g;x.fillRect(0,0,W,H);
@@ -85,6 +131,7 @@ function drawBack(){
     x.fillStyle=bg;x.beginPath();x.arc(bx,by,br,0,TAU);x.fill()}
   // shadow + wooden base
   x.fillStyle='rgba(0,0,0,.5)';x.beginPath();x.ellipse(L.cx,L.yb+22,L.jw*.6,14,0,0,TAU);x.fill();
+  if(SET){x.drawImage(SET.back,...L.img);backBase=c;rotShown=-1;return}
   const p0=L.x0-14,p1=L.x1+14;
   g=x.createLinearGradient(0,L.yb,0,L.yb+20);g.addColorStop(0,'#5d412b');g.addColorStop(1,'#26190f');
   x.fillStyle=g;x.beginPath();x.roundRect?x.roundRect(p0,L.yb-2,p1-p0,20,5):x.rect(p0,L.yb-2,p1-p0,20);x.fill();
@@ -153,7 +200,8 @@ function drawSoil(x){
   x.restore();
 }
 function drawFront(){
-  const[c,x]=mk();front=c;x.save();jarPath(x);x.clip();
+  const[c,x]=mk();front=c;if(SET){x.drawImage(SET.front,...L.img);return}
+  x.save();jarPath(x);x.clip();
   for(let i=0;i<34;i++){const xx=rnd(L.ax-L.r*.6,L.bx-4),yy=rnd(L.ly-L.r*.9,L.ground-4);if(!inLog(xx,yy))continue;
     x.fillStyle=`rgba(${rnd(150,185)|0},${rnd(180,205)|0},${rnd(148,170)|0},${rnd(.3,.65)})`;x.beginPath();x.arc(xx,yy,rnd(1.5,5)*L.sm,0,TAU);x.fill()}
   const leafC=['#7a4a22','#9a6a2c','#5e3a1e','#b0803a','#6b5a2a','#8c3f1f'];
@@ -172,7 +220,7 @@ function drawFront(){
   x.restore();
 }
 function drawGlass(){
-  const[c,x]=mk();glass=c;
+  const[c,x]=mk();glass=c;if(SET){x.drawImage(SET.glass,...L.img);return}
   x.save();jarPath(x);x.clip();
   let g=x.createLinearGradient(L.x0+L.jw*.05,0,L.x0+L.jw*.13,0);
   g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(.5,'rgba(230,245,235,.075)');g.addColorStop(1,'rgba(255,255,255,0)');
@@ -217,7 +265,7 @@ function drawSegs(n){
     gctx.lineWidth=[1.1,1.5,2.1][b];gctx.stroke(P[b])}
 }
 function initMyco(){
-  if(!myco)return;
+  if(!myco||!L)return;
   const{gw,gh,m}=buildMask();
   const err=myco.init(gw,gh,CELL,m,(R()*2**31)|0);
   if(err){console.error('myco.init',err);return}
@@ -255,15 +303,15 @@ function spawnMush(x,y,kind){
   if(x<L.x0+16||x>L.x1-16)return;
   if(mush.filter(m=>!m.link).length>=MAXM)return;
   for(const m of mush)if(Math.abs(m.x-x)<(m.link?36:18)*L.sm)return;
-  const sp=R()<(kind===2?.75:.45)?SPECIES.mycena:SPECIES.brown;
-  mush.push(makeMush({shape:sp.shape,tall:sp.tall,flat:sp.flat,pal:sp.pal,glow:sp.glow,spore:sp.spore,bulb:sp.bulb,x,y,
+  const myc=R()<(kind===2?.75:.45),sp=myc?SPECIES.mycena:SPECIES.brown;
+  mush.push(makeMush({sprite:(myc?'mycena':'brown')+(R()<.5?'':'2'),shape:sp.shape,tall:sp.tall,flat:sp.flat,pal:sp.pal,glow:sp.glow,spore:sp.spore,bulb:sp.bulb,x,y,
     H:L.jh*rnd(...sp.H),R:rnd(...sp.R)*L.sm,sw:rnd(...sp.sw)*L.sm,curve:rnd(...sp.curve),delay:0,dur:rnd(7,12)}));
 }
 function spawnBracket(x,y){
   if(brackets.length>=5)return;
   for(const b of brackets)if(Math.hypot(b.x-x,b.y-y)<32*L.sm)return;
   for(const m of mush)if(Math.abs(m.x-x)<14&&Math.abs(m.y-y)<20)return;
-  const b={x,y,R:rnd(8,14)*L.sm,n:R()<.5?2:3,t:0,dur:rnd(8,14),dx:rnd(.4,.7)*(R()<.5?-1:1)};
+  const b={x,y,R:rnd(13,20)*L.sm,n:R()<.5?2:3,t:0,dur:rnd(8,14),dx:rnd(.4,.7)*(R()<.5?-1:1)};
   // shelves hang down and step sideways; keep the whole cluster on the log
   const ex=b.x+(b.n-1)*b.dx*b.R,ey=b.y+(b.n-1)*b.R*.45+b.R*.6;
   if(!inLog(b.x-b.R,b.y)||!inLog(b.x+b.R,b.y)||!inLog(ex,ey))return;
@@ -280,6 +328,7 @@ function geom(m){
 }
 function drawMush(m){
   const G=m.G=geom(m);if(G.g<=0)return;
+  const S=SET&&SET.mush[m.sprite];if(S)return drawMushSprite(m,G,S);
   const c=ctx;c.save();c.globalAlpha=1-m.wilt;c.translate(m.x,m.y);c.rotate(G.th);
   if(G.g<.08){const pr=Math.max(1.5,m.R*.35*(G.g/.08));c.fillStyle=m.pal.stipe;c.beginPath();c.ellipse(0,-pr*.6,pr*.8,pr,0,0,TAU);c.fill();c.restore();return}
   const h=G.h,Rr=G.R,wb=m.sw*1.25*(.5+.5*clamp(G.cg)),wt=m.sw*(.6+.4*clamp(G.cg)),cu=m.curve*h;
@@ -300,9 +349,34 @@ function drawMush(m){
     for(let k=-.85;k<=.86;k+=.1){c.beginPath();c.moveTo(k*Rr*.95,0);c.lineTo(k*Rr*.35,Rr*.15*Math.sqrt(Math.max(0,1-k*k))+1);c.stroke()}
     const gr=c.createRadialGradient(-Rr*.3,-ry*.75,Rr*.05,0,-ry*.3,Rr*1.15);gr.addColorStop(0,m.pal.hi);gr.addColorStop(.55,m.pal.cap);gr.addColorStop(1,m.pal.dark);
     c.fillStyle=gr;c.beginPath();c.ellipse(0,0,Rr,ry,0,Math.PI,TAU);c.quadraticCurveTo(0,Rr*.08,-Rr,0);c.fill();
-    if(m.scales){c.fillStyle=m.pal.dark;for(const s of m.scales){c.beginPath();c.ellipse(s[0]*Rr,-s[1]*ry,Rr*.06,Rr*.032,s[2],0,TAU);c.fill()}}
+    if(m.scales){c.fillStyle=m.warts?'#f1ece0':m.pal.dark;for(const s of m.scales){c.beginPath();c.ellipse(s[0]*Rr,-s[1]*ry,Rr*.06,Rr*.032,s[2],0,TAU);c.fill()}}
     if(m.umbo){c.fillStyle=shade(m.pal.dark,-.2);c.beginPath();c.ellipse(0,-ry*.93,Rr*.17,ry*.12,0,0,TAU);c.fill()}
   }
+  c.restore();
+}
+// Rendered mushrooms (blender/terrarium.py): a strip of frames from pinhead to
+// open cap, crossfaded by growth. Frames sit at growth times S.t, packed where
+// the shape changes fastest. Each frame records where its cap is, so the
+// glow, labels, taps and spore puffs follow it. A strip's stem is 1 unit long
+// at maturity, so it's scaled to make that m.H px.
+function drawMushSprite(m,G,S){
+  const g=clamp(G.g),ts=S.t;let i=0;while(i<S.n-2&&ts[i+1]<=g)i++;
+  const u=clamp((g-ts[i])/(ts[i+1]-ts[i])),k=m.H/S.ppu;
+  const a=S.f[i],b=S.f[i+1],mix=j=>a[j]+(b[j]-a[j])*u,h=mix(0);
+  G.h=h*k;G.R=mix(1)*k;G.capH=mix(2)*k;
+  G.tx=m.x+Math.sin(G.th)*G.h;G.ty=m.y-Math.cos(G.th)*G.h;
+  const c=ctx,al=1-m.wilt;c.save();c.translate(m.x,m.y);c.rotate(G.th);
+  // Frames are far apart in time, so stretch the bare middle of each one's
+  // stem to today's length and the cap rises smoothly instead of in steps.
+  // Strip px: base at S.ay, y grows down.
+  const frame=(j,alpha)=>{
+    const x=j*S.fw,hj=S.f[j][0],d=h-hj,y0=S.ay-.15*hj,y1=S.ay-.5*hj,dx=-S.ax*k,dw=S.fw*k;
+    c.globalAlpha=alpha;
+    c.drawImage(S.img,x,y0,S.fw,S.fh-y0,dx,(y0-S.ay)*k,dw,(S.fh-y0)*k);
+    c.drawImage(S.img,x,0,S.fw,y1,dx,(-S.ay-d)*k,dw,y1*k);
+    c.drawImage(S.img,x,y1-.5,S.fw,y0-y1+1,dx,(y1-.5-S.ay-d)*k,dw,(y0-y1+1+d)*k);
+  };
+  frame(i,al);frame(i+1,al*u);
   c.restore();
 }
 function drawGlow(m){
@@ -315,9 +389,21 @@ function drawGlow(m){
 }
 function drawBracket(b){
   const g=easeOut(clamp(b.t/b.dur));if(g<=0)return;
+  const S=SET&&SET.mush['turkey'+b.n];if(S)return drawBracketSprite(b,g,S);
   for(let j=b.n-1;j>=0;j--){const cx=b.x+j*b.dx*b.R,cy=b.y+j*b.R*.45,r=b.R*g*(1-j*.15);
     for(let k=0;k<TT.length;k++){const f=1-k*.15;ctx.fillStyle=TT[k];ctx.beginPath();ctx.ellipse(cx,cy,r*f,r*.6*f,0,0,Math.PI);ctx.fill()}
     ctx.strokeStyle='rgba(30,20,12,.5)';ctx.lineWidth=.6;ctx.beginPath();ctx.ellipse(cx,cy,r,r*.6,0,0,Math.PI);ctx.stroke()}
+}
+// Rendered brackets: frames of the shelves growing, each scaled between
+// frames to the interpolated size of the top shelf so the growth is smooth.
+// Mirrored when the tiers step left.
+function drawBracketSprite(b,g,S){
+  const f=g*(S.n-1),i=Math.min(S.n-2,f|0),u=f-i,ra=S.f[i][0],rb=S.f[i+1][0],r=ra+(rb-ra)*u;
+  const k=b.R/S.f[S.n-1][0],c=ctx;c.save();c.translate(b.x,b.y);c.scale(b.dx<0?-k:k,k);
+  const frame=(j,rj,alpha)=>{const s=r/rj;c.globalAlpha=alpha;
+    c.drawImage(S.img,j*S.fw,0,S.fw,S.fh,-S.ax*s,-S.ay*s,S.fw*s,S.fh*s)};
+  frame(i,ra,1);frame(i+1,rb,u);
+  c.restore();
 }
 function drawLabels(){
   ctx.textAlign='center';ctx.textBaseline='bottom';ctx.font='500 11px "JetBrains Mono",ui-monospace,monospace';
@@ -367,16 +453,16 @@ function drawSpores(){
 
 /* ---------- setup ---------- */
 function init(){
-  layout();drawBack();drawFront();drawGlass();
+  syncTheme();layout();drawBack();drawFront();drawGlass();
   [myc,mctx]=mk();[mglow,gctx]=mk();
   mctx.strokeStyle='rgba(236,230,212,.17)';mctx.lineWidth=.7;
   gctx.strokeStyle='rgba(140,255,170,.32)';gctx.lineWidth=1.2;
   spores=[];mush=[];brackets=[];MAXM=W<600?9:15;makeFlies();
   initMyco();
   LINKS.forEach((d,i)=>{const x=L.x0+L.jw*d.f;
-    mush.push(makeMush({shape:d.shape,tall:d.tall,flat:d.flat,pal:d.pal,glow:d.glow,spore:d.spore,bulb:d.bulb,ring:d.ring,umbo:d.umbo,scales:d.scales,
+    mush.push(makeMush({sprite:d.key,shape:d.shape,tall:d.tall,flat:d.flat,pal:d.pal,glow:d.glow,spore:d.spore,bulb:d.bulb,ring:d.ring,umbo:d.umbo,scales:d.scales,warts:d.warts,
       x,y:surfaceTop(x),link:d.key,H:clamp(L.jh*d.Hf,38,150),R:clamp(L.jw*d.Rf,10,46),sw:clamp(d.sw*L.sm,1.6,7),
-      curve:rnd(-.06,.06),lean:rnd(-.05,.05),delay:.5+i*.8,dur:3.4+R()}))});
+      curve:rnd(-.06,.06),lean:rnd(-.05,.05),delay:.5+i*.8,dur:SET?5.5+R()*1.5:3.4+R()}))});
 }
 
 /* ---------- loop ---------- */
@@ -394,6 +480,7 @@ function frame(now){
   updateSpores(k,dt);updateFlies(k);
 
   ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  if(SET&&SET.room)drawRoom();
   ctx.drawImage(back,0,0,W,H);ctx.drawImage(myc,0,0,W,H);ctx.drawImage(front,0,0,W,H);
   for(const b of brackets)drawBracket(b);
   for(const m of mush)drawMush(m);
@@ -405,10 +492,15 @@ function frame(now){
     drawFlies();
     ctx.globalCompositeOperation='source-over'}
   drawSpores();
-  ctx.drawImage(glass,0,0,W,H);
+  // rendered glass is reflections only, which add light rather than cover
+  if(SET)ctx.globalCompositeOperation='screen';
+  ctx.drawImage(glass,0,0,W,H);ctx.globalCompositeOperation='source-over';
   drawLabels();
   statT+=dt;if(statT>.5){statT=0;const fb=mush.filter(m=>m.G&&m.G.g>.3).length+brackets.length;
-    const st=myco&&myco.stats();statsEl.textContent=st?(W<520?`${Math.round(st.length).toLocaleString()} mm hyphae · ${st.tips} tips · ${fb} fruiting`:`${Math.round(st.length).toLocaleString()} mm of hyphae · ${st.tips} tips · ${fb} fruiting bodies · ${sown} spores sown`):mycoState==='failed'?'the mycelium failed to load':'germinating…'}
+    const st=myco&&myco.stats();
+    // most of the wood goes in the first few minutes; front-load the look of it
+    if(st)composeRot(Math.pow(clamp((1-st.wood)/.9),.7));
+    statsEl.textContent=st?(W<520?`${Math.round(st.length).toLocaleString()} mm hyphae · ${st.tips} tips · ${fb} fruiting`:`${Math.round(st.length).toLocaleString()} mm of hyphae · ${st.tips} tips · ${fb} fruiting bodies · ${sown} spores sown`):mycoState==='failed'?'the mycelium failed to load':'germinating…'}
   requestAnimationFrame(frame);
 }
 
@@ -427,18 +519,41 @@ function hit(x,y){let best=null,bd=1e9;
     if(d<rr&&(m.link?d-8:d)<bd){bd=m.link?d-8:d;best=m}}
   return best}
 cv.addEventListener('pointerdown',e=>{
+  if(!L)return;
   const x=e.clientX,y=e.clientY;
   if(card.classList.contains('open')){closeCard();return}
   const m=hit(x,y);
   if(m){puff(m,m.link?34:16);if(m.link)openCard(m.link);return}
   if(inJar(x,y,8)){sown+=16;for(let i=0;i<16;i++)addSpore(x+rnd(-4,4),y+rnd(-4,4),rnd(-.8,.8),rnd(-.6,.5),'235,225,200')}
 });
-cv.addEventListener('pointermove',e=>{cv.style.cursor=hit(e.clientX,e.clientY)?'pointer':inJar(e.clientX,e.clientY,8)?'crosshair':'default'});
+cv.addEventListener('pointermove',e=>{if(!L)return;cv.style.cursor=hit(e.clientX,e.clientY)?'pointer':inJar(e.clientX,e.clientY,8)?'crosshair':'default'});
 const nb=document.getElementById('nightBtn');
-const setBtn=()=>nb.textContent=night?'☀︎ day':'☾ night';setBtn();
+// dark text only over the rendered room's daylight; the procedural jar is dark
+const syncTheme=()=>document.body.classList.toggle('day',!night&&!!(SET&&SET.room));
+const setBtn=()=>{nb.textContent=night?'☀︎ day':'☾ night';syncTheme()};setBtn();
 nb.onclick=()=>{night=!night;setBtn()};
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(init,220)});
 
-init();requestAnimationFrame(t=>{last=t;frame(t)});
+async function loadSet(){
+  if(new URLSearchParams(location.search).get('set')==='0')return;
+  // phones get the taller portrait jar
+  const base='/terrarium/set/',dir=innerWidth<600?'portrait/':'';
+  const img=n=>new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=base+n});
+  const json=async n=>(await fetch(base+n)).json();
+  const[meta,sheet,room]=await Promise.all([json(dir+'set.json'),json('mush.json'),json('room.json')]);
+  // one room for both: it's the same windowsill whichever jar stands on it
+  const[back,front,glass,id,day,night]=await Promise.all(['back.webp','front.webp','glass.webp','id.png'].map(n=>dir+n).concat('room-day.webp','room-night.webp').map(img));
+  const mush={};
+  await Promise.all(Object.entries(sheet).map(async([k,v])=>{mush[k]={...v,img:await img(`mush/${k}.webp`)}}));
+  // too late: the procedural jar is already up, and switching mid-run would reset it
+  if(L)return;
+  SET={...meta,back,front,glass,id,mush,room:{box:room.box,day,night}};
+  // the log starts fresh, so its rot stages can arrive later
+  json(dir+'rot.json').then(async r=>{SET.rot={box:r.box,imgs:await Promise.all(Array.from({length:r.n},(_,k)=>img(`${dir}rot${k+1}.webp`)))}})
+    .catch(e=>console.warn('rot stages',e));
+}
 loadMyco();
+// Give the rendered set a moment to load; draw the procedural jar if it can't.
+Promise.race([loadSet().catch(e=>console.warn('terrarium set',e)),new Promise(r=>setTimeout(r,8000))]).then(()=>{
+  init();requestAnimationFrame(t=>{last=t;frame(t)})});
 })();

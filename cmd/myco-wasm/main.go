@@ -8,7 +8,7 @@
 //	myco.warm(steps, dstUint8Array) -> number of segments
 //	myco.step(frames, dstUint8Array) -> {n, fruits: [x, y, kind, bracket, ...]}
 //	myco.sow(x, n)
-//	myco.stats() -> {length, tips}
+//	myco.stats() -> {length, tips, wood}
 //
 // Segments are written to dst (a byte view of a Float32Array) as
 // x0, y0, x1, y1, width.
@@ -85,7 +85,7 @@ func stats(js.Value, []js.Value) any {
 	if sim == nil {
 		return nil
 	}
-	return map[string]any{"length": sim.Length, "tips": sim.Tips()}
+	return map[string]any{"length": sim.Length, "tips": sim.Tips(), "wood": sim.WoodLeft()}
 }
 
 // copySegs copies as many whole segments as fit into dst and returns the count.

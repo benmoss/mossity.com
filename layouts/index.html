@@ -1,15 +1,73 @@
-{{ define "main" }}
-{{ .Content }}
-
-{{ $recentPosts := first 10 (where .Site.RegularPages "Type" "in" .Site.Params.mainSections) }}
-
-<h2>Recent posts</h2>
-<ul>
-    {{ range $recentPosts }}
-    <li>
-        <a href={{.Permalink}}>{{.Title}}</a> - Published on {{ .Date.Format "January 2, 2006" }}
-    </li>
-    {{ end }}
-</ul>
-
-{{ end }}
+{{- /* Standalone homepage: the terrarium. No baseof; old posts still build with the theme. */ -}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mossity</title>
+<meta name="description" content="Ben Moss, aka @mossity aka @benmoss. A small decaying world.">
+<meta property="og:title" content="mossity">
+<meta property="og:description" content="Ben Moss, aka @mossity aka @benmoss. A small decaying world.">
+<meta property="og:url" content="{{ .Site.BaseURL }}">
+<meta property="og:image" content="{{ "images/share.png" | absURL }}">
+<link rel="icon" type="image/png" href="/images/favicon.png">
+<link rel="preload" href="/terrarium/myco.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#efe6d2;--dim:rgba(239,230,210,.55);--gold:#cbb88f;--bg:#0b100c}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font-family:'JetBrains Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+header{color:var(--ink);position:fixed;top:0;left:0;right:0;padding:20px 22px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none;z-index:2;text-shadow:0 1px 10px rgba(0,0,0,.5)}
+h1{font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:clamp(30px,5vw,46px);line-height:1;letter-spacing:-.015em;font-variation-settings:'opsz' 144}
+h1 em{font-style:italic;font-weight:300;color:var(--gold)}
+.sub{font-size:11px;color:var(--dim);margin-top:9px;letter-spacing:.03em;line-height:1.5}
+.btn{pointer-events:auto;background:rgba(239,230,210,.05);border:1px solid rgba(239,230,210,.18);color:var(--ink);font:inherit;font-size:11px;padding:7px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:rgba(239,230,210,.1)}
+footer{position:fixed;left:0;right:0;bottom:0;padding:12px 22px 14px;display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:var(--dim);pointer-events:none;z-index:2;letter-spacing:.03em;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+#card{position:fixed;z-index:5;left:50%;bottom:22px;transform:translate(-50%,16px);width:min(420px,calc(100% - 28px));background:rgba(18,22,17,.93);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(239,230,210,.15);border-radius:14px;padding:20px 22px 20px;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#card.open{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#card .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+#card h2{font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:25px;margin:7px 0 8px;letter-spacing:-.01em}
+#card p{font-family:'Fraunces',Georgia,serif;font-size:15.5px;line-height:1.5;color:rgba(239,230,210,.85)}
+#card a.go{display:inline-block;margin-top:14px;color:var(--ink);font-size:12px;border-bottom:1px solid var(--gold);text-decoration:none;padding-bottom:2px}
+#card .x{position:absolute;top:8px;right:12px;background:none;border:0;color:var(--dim);font-size:22px;line-height:1;cursor:pointer;padding:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* daylight on the windowsill wall: dark ink instead of cream */
+header,footer{transition:color .4s ease}
+body.day header,body.day footer{--ink:#1c2119;--dim:rgba(28,33,25,.75);text-shadow:0 1px 10px rgba(255,255,255,.3)}
+body.day h1 em{color:#76612e}
+body.day .btn{background:rgba(28,33,25,.06);border-color:rgba(28,33,25,.28)}
+body.day .btn:hover{background:rgba(28,33,25,.12)}
+@media (max-width:520px){.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c" aria-hidden="true"></canvas>
+<header>
+  <div>
+    <h1>moss<em>ity</em></h1>
+    <div class="sub">Ben Moss · a small decaying world<br>tap a mushroom, or tap the jar to sow spores</div>
+  </div>
+  <button class="btn" id="nightBtn" type="button"></button>
+</header>
+<footer><span id="stats"></span><span class="hide-sm">mossity.com</span></footer>
+<div id="card" role="dialog" aria-live="polite">
+  <button class="x" id="cardX" type="button" aria-label="Close">×</button>
+  <div class="k" id="cardK"></div>
+  <h2 id="cardT"></h2>
+  <p id="cardP"></p>
+  <a class="go" id="cardA" href="#" target="_blank" rel="noopener"></a>
+</div>
+<nav class="sr">
+  <p>Hi! I'm Ben, aka @mossity aka @benmoss on various parts of the web.</p>
+  <a href="https://github.com/benmoss">GitHub</a>
+  <a href="https://bsky.app/profile/mossity.com">Bluesky</a>
+  <a href="https://mycomatch.mossity.com/">Mycomatch, a mushroom identification trainer</a>
+</nav>
+<script src="/terrarium/wasm_exec.js"></script>
+<script src="/terrarium/terrarium.js"></script>
+</body>
+</html>

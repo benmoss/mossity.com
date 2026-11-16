@@ -1,16 +1,28 @@
 [workspace]
 authors = ["Ben Moss <ben@mossity.com>"]
 channels = ["conda-forge"]
-description = "Add a short description here"
+description = "mossity.com: a fungal terrarium homepage, mycelium simulated in Go compiled to WebAssembly"
 name = "mossity.com"
 platforms = ["osx-arm64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
-serve = "hugo serve"
+# Mycelium simulation -> static/terrarium/myco.wasm, built with TinyGo (about
+# 90KB vs 2MB from the standard Go toolchain). See scripts/tinygo.sh.
+wasm = { cmd = "bash scripts/tinygo.sh build -o static/terrarium/myco.wasm -target wasm -no-debug -opt=z ./cmd/myco-wasm", inputs = ["go.mod", "myco/*.go", "cmd/myco-wasm/*.go", "scripts/tinygo.sh"], outputs = ["static/terrarium/myco.wasm"] }
+wasm-exec = { cmd = "bash scripts/copy-wasm-exec.sh", inputs = ["scripts/tinygo.sh"], outputs = ["static/terrarium/wasm_exec.js"] }
+assets = { depends-on = ["wasm", "wasm-exec"] }
+
+test = "go test ./myco/..."
+test-tinygo = "bash scripts/tinygo.sh test ./myco/"
+serve = { cmd = "hugo serve", depends-on = ["assets"] }
+build = { cmd = "hugo --gc --minify", depends-on = ["assets"] }
 
 [dependencies]
 hugo = ">=0.143.1,<0.144"
+# Verified with TinyGo 0.44 (scripts/tinygo.sh); bump them together.
+go = ">=1.24,<1.28"
+binaryen = "*"
 
 [system-requirements]
 linux="4.14"

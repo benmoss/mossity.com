@@ -19,7 +19,7 @@ frontend:
         - export PATH=/root/.pixi/bin:$PATH
     build:
       commands:
-        - pixi run hugo --gc --minify
+        - pixi run build
   artifacts:
     baseDirectory: public
     files:

@@ -13,7 +13,7 @@ function shade(hex,a){const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255
 
 /* ---------- content ---------- */
 const CARDS={
-  about:{k:'Gymnopilus · about',t:"Hi, I'm Ben.",p:"Aka @mossity aka @benmoss on various parts of the web. I build infrastructure in Brooklyn, mostly storage, and I like things that grow in the dark."},
+  about:{k:'Gymnopilus · about',t:"Hi, I'm Ben.",p:"Aka @mossity aka @benmoss on various parts of the web."},
   github:{k:'Macrolepiota · code',t:'GitHub',p:'Code, experiments, and half-finished things.',href:'https://github.com/benmoss',cta:'github.com/benmoss →'},
   bluesky:{k:'Entoloma hochstetteri · social',t:'Bluesky',p:'The blue one. Its spores print pink, which feels right for a social network.',href:'https://bsky.app/profile/mossity.com',cta:'@mossity.com →'},
   mycomatch:{k:'Amanita muscaria · mycomatch',t:'Mycomatch',p:"A trainer for identifying mushrooms from real iNaturalist observations. Still a work in progress.",href:'https://mycomatch.mossity.com/',cta:'mycomatch.mossity.com →'},

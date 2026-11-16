@@ -15,7 +15,7 @@ function shade(hex,a){const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255
 const CARDS={
   about:{k:'Gymnopilus · about',t:"Hi, I'm Ben.",p:"Aka @mossity aka @benmoss on various parts of the web."},
   github:{k:'Macrolepiota · code',t:'GitHub',p:'Code, experiments, and half-finished things.',href:'https://github.com/benmoss',cta:'github.com/benmoss →'},
-  bluesky:{k:'Entoloma hochstetteri · social',t:'Bluesky',p:'The blue one. Its spores print pink, which feels right for a social network.',href:'https://bsky.app/profile/mossity.com',cta:'@mossity.com →'},
+  bluesky:{k:'Entoloma hochstetteri · social',t:'Bluesky',href:'https://bsky.app/profile/mossity.com',cta:'@mossity.com →'},
   mycomatch:{k:'Amanita muscaria · mycomatch',t:'Mycomatch',p:"A trainer for identifying mushrooms from real iNaturalist observations. Still a work in progress.",href:'https://mycomatch.mossity.com/',cta:'mycomatch.mossity.com →'},
   colophon:{k:'Mycena · colophon',t:'How this jar works',p:'Hyphae wander through soil and rotting wood, branch, and fruit where they get dense enough. Turkey tail shelves show up on the log, and as the mycelium eats it the bark sloughs off and the wood bleaches. At night the Mycena glow and the mycelium gives off a little foxfire. Tap anywhere in the jar to sow spores.'}
 };
@@ -507,7 +507,7 @@ function frame(now){
 /* ---------- interaction ---------- */
 const card=document.getElementById('card');
 function openCard(key){const d=CARDS[key];
-  document.getElementById('cardK').textContent=d.k;document.getElementById('cardT').textContent=d.t;document.getElementById('cardP').textContent=d.p;
+  document.getElementById('cardK').textContent=d.k;document.getElementById('cardT').textContent=d.t;const cp=document.getElementById('cardP');cp.textContent=d.p||'';cp.style.display=d.p?'':'none';
   const a=document.getElementById('cardA');if(d.href){a.href=d.href;a.textContent=d.cta;a.style.display=''}else a.style.display='none';
   card.classList.add('open')}
 const closeCard=()=>card.classList.remove('open');

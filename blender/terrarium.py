@@ -169,6 +169,49 @@ def textured(name, ramp, scale, rough=0.85, bump=0.4, voronoi=None, stretch=(1, 
     L.new(b.outputs["Normal"], p.inputs["Normal"])
     return m
 
+RIVER = [(0.22, 0.2, 0.18), (0.32, 0.28, 0.23), (0.1, 0.095, 0.09), (0.4, 0.38, 0.35),
+         (0.2, 0.15, 0.11), (0.27, 0.26, 0.25), (0.45, 0.43, 0.39), (0.15, 0.14, 0.13)]
+
+def river_stone():
+    """Rounded river pebbles: each its own color from RIVER, finely speckled,
+    with a little sheen."""
+    m = bpy.data.materials.new("river-stone")
+    m.use_nodes = True
+    N, L = m.node_tree.nodes, m.node_tree.links
+    p = N["Principled BSDF"]
+    p.inputs["Roughness"].default_value = 0.38
+    oi = N.new("ShaderNodeObjectInfo")
+    pick = N.new("ShaderNodeValToRGB")
+    pick.color_ramp.interpolation = "CONSTANT"
+    e = pick.color_ramp.elements
+    e[0].position, e[0].color = 0.0, (*RIVER[0], 1)
+    e[1].position, e[1].color = 1.0, (*RIVER[-1], 1)
+    for k, c in enumerate(RIVER[1:-1], 1):
+        e.new(k / len(RIVER)).color = (*c, 1)
+    L.new(oi.outputs["Random"], pick.inputs["Fac"])
+    tc = N.new("ShaderNodeTexCoord")
+    sp = N.new("ShaderNodeTexNoise")
+    sp.inputs["Scale"].default_value = 160
+    sp.inputs["Detail"].default_value = 4
+    L.new(tc.outputs["Object"], sp.inputs["Vector"])
+    fleck = N.new("ShaderNodeMapRange")
+    fleck.inputs["To Min"].default_value, fleck.inputs["To Max"].default_value = 0.7, 1.25
+    L.new(sp.outputs["Fac"], fleck.inputs["Value"])
+    mul = N.new("ShaderNodeMix")
+    mul.data_type, mul.blend_type = "RGBA", "MULTIPLY"
+    mul.inputs["Factor"].default_value = 1
+    L.new(pick.outputs["Color"], sock(mul.inputs, "A", "RGBA"))
+    gc = N.new("ShaderNodeCombineColor")
+    for i in range(3):
+        L.new(fleck.outputs["Result"], gc.inputs[i])
+    L.new(gc.outputs[0], sock(mul.inputs, "B", "RGBA"))
+    L.new(sock(mul.outputs, "Result", "RGBA"), p.inputs["Base Color"])
+    b = N.new("ShaderNodeBump")
+    b.inputs["Strength"].default_value = 0.08
+    L.new(sp.outputs["Fac"], b.inputs["Height"])
+    L.new(b.outputs["Normal"], p.inputs["Normal"])
+    return m
+
 def soil_material():
     m = bpy.data.materials.new("soil")
     m.use_nodes = True
@@ -242,7 +285,9 @@ def soil_material():
 
 M = {
     "soil": soil_material(),
-    "gravel": textured("gravel", [(0.0, (0.07, 0.075, 0.08)), (0.5, (0.15, 0.155, 0.16)), (1.0, (0.26, 0.26, 0.25))], 6, rough=0.55, bump=0.2, random_tint=0.45),
+    # the gravel bed is only seen in the gaps between the stones
+    "gravel": textured("gravel", [(0.0, (0.02, 0.02, 0.02)), (1.0, (0.07, 0.065, 0.06))], 40, rough=0.7, bump=0.3),
+    "stone": river_stone(),
     "pebble": textured("pebble", [(0.0, (0.05, 0.04, 0.03)), (1.0, (0.16, 0.13, 0.1))], 8, rough=0.6, bump=0.2, random_tint=0.4),
     "bark": textured("bark", [(0.0, (0.012, 0.008, 0.005)), (0.45, (0.05, 0.034, 0.022)), (0.75, (0.1, 0.07, 0.048)), (1.0, (0.17, 0.13, 0.095))], 9, stretch=(0.2, 1, 1), voronoi=20, bump=1.0),
     "base": textured("base", [(0.0, (0.12, 0.07, 0.04)), (1.0, (0.3, 0.19, 0.11))], 3, stretch=(1, 1, 12), rough=0.45, bump=0.15),
@@ -435,12 +480,20 @@ for i in range(140):
 
 # gravel bed and stones against the glass
 lathe("gravel-bed", [(SOIL_R, 0.0), (SOIL_R, GRAVEL)], 120, M["gravel"])
-for i in range(520):
-    x = rnd(-0.97, 0.97)
-    y = -math.sqrt(max(0.0, SOIL_R ** 2 - x * x)) + rnd(0.0, 0.03)
-    s = rnd(0.014, 0.032)
-    blob(f"stone{i}", M["gravel"], (x, y, rnd(0.008, GRAVEL - 0.004)), (s, s * rnd(0.7, 1.0), s * rnd(0.6, 0.9)),
-         (rnd(0, 3), rnd(0, 3), rnd(0, 3)), subdiv=2, rough=0.3, seed=i)
+# river pebbles against the glass: rounded and flattish, mostly small with a
+# few big ones, in two layers so the gaps show more stones rather than bed.
+# They draw from their own generator; the shared one is advanced as the old
+# 520-stone loop did, so everything placed after keeps its position.
+srng = random.Random(11)
+for _ in range(520 * 9):
+    rng.random()
+for i in range(1400):
+    x = srng.uniform(-0.97, 0.97)
+    y = -math.sqrt(max(0.0, SOIL_R ** 2 - x * x)) + (srng.uniform(0.0, 0.012) if i % 3 else srng.uniform(0.012, 0.035))
+    s = 0.008 + 0.026 * srng.random() ** 2.2
+    blob(f"stone{i}", M["stone"], (x, y, srng.uniform(0.004, GRAVEL - 0.003)),
+         (s * srng.uniform(1.0, 1.35), s * srng.uniform(0.6, 0.9), s * srng.uniform(0.55, 0.8)),
+         (srng.uniform(-0.3, 0.3), srng.uniform(-0.3, 0.3), srng.uniform(0, 3)), subdiv=3, rough=0.1, seed=i)
 # a few pebbles in the soil, against the glass
 for i in range(30):
     x = rnd(-0.95, 0.95)
